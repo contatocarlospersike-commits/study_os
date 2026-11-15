@@ -1,0 +1,123 @@
+{
+  "name": "Study OS — Spaced Repetition & Auto-Quiz Dispatcher",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "study-os",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Study OS Outbound Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "session_auto_quiz",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Auto-Quiz"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "spaced_repetition_due",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Spaced Repetition"
+            }
+          ]
+        }
+      },
+      "id": "route-event",
+      "name": "Route Study OS Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_WHATSAPP_CLOUD_TOKEN" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: 'YOUR_RECIPIENT_E164', type: 'text', text: { body: '*' + $json.body.title + '*\\n' + $json.body.message } }) }}"
+      },
+      "id": "whatsapp-dispatch",
+      "name": "WhatsApp Cloud API Dispatch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [760, 300]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 6 }]
+        }
+      },
+      "id": "cron-sr-check",
+      "name": "Every 6h SR Poll",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 520]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/automation/inbound",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"check_due_reviews\"}"
+      },
+      "id": "trigger-study-os",
+      "name": "Trigger Study OS SR Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 520]
+    }
+  ],
+  "connections": {
+    "Study OS Outbound Webhook": {
+      "main": [[{ "node": "Route Study OS Event", "type": "main", "index": 0 }]]
+    },
+    "Route Study OS Event": {
+      "main": [
+        [{ "node": "WhatsApp Cloud API Dispatch", "type": "main", "index": 0 }],
+        [{ "node": "WhatsApp Cloud API Dispatch", "type": "main", "index": 0 }]
+      ]
+    },
+    "Every 6h SR Poll": {
+      "main": [[{ "node": "Trigger Study OS SR Check", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" }
+}

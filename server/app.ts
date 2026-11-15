@@ -1,0 +1,59 @@
+import express from 'express';
+import cors from 'cors';
+import path from 'node:path';
+import fs from 'node:fs';
+import { ensureDatabaseReady } from './db.js';
+import { subjectsRouter } from './routes/subjects.js';
+import { reviewsRouter } from './routes/reviews.js';
+import { quizzesRouter } from './routes/quizzes.js';
+import { sessionsRouter } from './routes/sessions.js';
+import { automationRouter, analyticsRouter } from './routes/automation.js';
+
+export function createApp() {
+  const app = express();
+
+  app.use(cors());
+  app.use(express.json({ limit: '2mb' }));
+
+  app.get('/api/health', async (_req, res) => {
+    try {
+      await ensureDatabaseReady();
+      res.json({
+        ok: true,
+        service: 'study-os-api',
+        database: process.env.DATABASE_URL ? 'postgres' : 'sqlite',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: (err as Error).message });
+    }
+  });
+
+  // Ensure DB schema + seed are initialized before handling API routes
+  app.use('/api', async (_req, res, next) => {
+    try {
+      await ensureDatabaseReady();
+      next();
+    } catch (err) {
+      res.status(500).json({ error: `Database initialization failed: ${(err as Error).message}` });
+    }
+  });
+
+  app.use('/api/subjects', subjectsRouter);
+  app.use('/api/reviews', reviewsRouter);
+  app.use('/api/quizzes', quizzesRouter);
+  app.use('/api/sessions', sessionsRouter);
+  app.use('/api/automation', automationRouter);
+  app.use('/api/analytics', analyticsRouter);
+
+  // Serve built SPA in standalone production (non-Vercel)
+  const distDir = path.resolve(process.cwd(), 'dist');
+  if (!process.env.VERCEL && process.env.NODE_ENV === 'production' && fs.existsSync(distDir)) {
+    app.use(express.static(distDir));
+    app.get('/{*splat}', (_req, res) => {
+      res.sendFile(path.join(distDir, 'index.html'));
+    });
+  }
+
+  return app;
+}

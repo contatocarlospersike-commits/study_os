@@ -1,0 +1,32 @@
+{
+  "name": "Study OS — Cognitive Learning Engine",
+  "short_name": "Study OS",
+  "description": "High-efficiency, evidence-based learning OS with Active Recall, Spaced Repetition, Interleaving, and Automated Recovery Plans.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Spaced Repetition Queue",
+      "short_name": "Review",
+      "url": "/?view=reviews",
+      "description": "Jump straight to due flashcards"
+    },
+    {
+      "name": "Active Recall Quiz",
+      "short_name": "Quiz",
+      "url": "/?view=quizzes",
+      "description": "Test conceptual retention"
+    }
+  ]
+}

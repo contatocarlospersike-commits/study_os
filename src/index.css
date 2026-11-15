@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark light;
+  --scrollbar-track: #09090b;
+  --scrollbar-thumb: #3f3f46;
+  --focus-ring: #22d3ee;
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 9999px;
+  }
+}
+
+html,
+body {
+  background-color: #09090b;
+  color: #f4f4f5;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+.app-shell {
+  min-height: 100dvh;
+}
+
+/* Fluid typography adhering to max <= 2.5 * min for WCAG 1.4.4 zoom compliance */
+.heading-fluid {
+  font-size: clamp(1.25rem, 1rem + 1.2vw, 2rem);
+  line-height: 1.2;
+}
+
+/* Natural interactions: keyboard focus ring + tactile press feedback */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+:where(button) {
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, box-shadow 150ms ease-out, scale 150ms ease-out;
+}
+
+:where(button):active:not(:disabled) {
+  scale: 0.97;
+}
+
+/* Swipeable horizontal deck with native scroll-snap */
+.swipe-deck {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  padding-bottom: 0.5rem;
+}
+
+.swipe-deck > * {
+  scroll-snap-align: start;
+}
+
+/* Container-query adaptive card grid */
+.cq-panel {
+  container-type: inline-size;
+}
+
+.cq-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@container (min-width: 620px) {
+  .cq-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 980px) {
+  .cq-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Reveal card actions on hover, keyboard focus, and touch devices */
+.reveal-actions {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.group:hover .reveal-actions,
+.group:focus-within .reveal-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .reveal-actions {
+    opacity: 1;
+  }
+}
