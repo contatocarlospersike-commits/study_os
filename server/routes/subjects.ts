@@ -4,16 +4,17 @@ import { execute, queryAll, queryOne } from '../db.js';
 
 export const subjectsRouter = Router();
 
-subjectsRouter.get('/', async (_req, res) => {
+subjectsRouter.get('/', async (req, res) => {
   const nowIso = new Date().toISOString();
   const subjects = await queryAll(
     `SELECT s.*,
-      (SELECT COUNT(*) FROM concepts c WHERE c.subject_id = s.id) as concept_count,
-      (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id) as card_count,
-      (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id AND f.due_at <= ?) as due_count
+      (SELECT COUNT(*) FROM concepts c WHERE c.subject_id = s.id AND c.user_id = s.user_id) as concept_count,
+      (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id AND f.user_id = s.user_id) as card_count,
+      (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id AND f.user_id = s.user_id AND f.due_at <= ?) as due_count
      FROM subjects s
+     WHERE s.user_id = ?
      ORDER BY s.updated_at DESC`,
-    [nowIso]
+    [nowIso, req.userId]
   );
   res.json(
     subjects.map((s) => ({
@@ -26,18 +27,21 @@ subjectsRouter.get('/', async (_req, res) => {
 });
 
 subjectsRouter.get('/:id', async (req, res) => {
-  const subject = await queryOne(`SELECT * FROM subjects WHERE id = ?`, [req.params.id]);
+  const subject = await queryOne(
+    `SELECT * FROM subjects WHERE id = ? AND user_id = ?`,
+    [req.params.id, req.userId]
+  );
   if (!subject) {
     res.status(404).json({ error: 'Subject not found' });
     return;
   }
   const concepts = await queryAll(
-    `SELECT * FROM concepts WHERE subject_id = ? ORDER BY created_at DESC`,
-    [req.params.id]
+    `SELECT * FROM concepts WHERE subject_id = ? AND user_id = ? ORDER BY created_at DESC`,
+    [req.params.id, req.userId]
   );
   const flashcards = await queryAll(
-    `SELECT * FROM flashcards WHERE subject_id = ? ORDER BY due_at ASC`,
-    [req.params.id]
+    `SELECT * FROM flashcards WHERE subject_id = ? AND user_id = ? ORDER BY due_at ASC`,
+    [req.params.id, req.userId]
   );
   res.json({ ...subject, concepts, flashcards });
 });
@@ -59,19 +63,19 @@ subjectsRouter.post('/', async (req, res) => {
   const now = new Date().toISOString();
 
   await execute(
-    `INSERT INTO subjects (id, name, slug, color, description, notes_markdown, transcript_markdown, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, name.trim(), slug, color, description, notes_markdown, transcript_markdown, now, now]
+    `INSERT INTO subjects (id, user_id, name, slug, color, description, notes_markdown, transcript_markdown, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, req.userId, name.trim(), slug, color, description, notes_markdown, transcript_markdown, now, now]
   );
 
-  const created = await queryOne(`SELECT * FROM subjects WHERE id = ?`, [id]);
+  const created = await queryOne(`SELECT * FROM subjects WHERE id = ? AND user_id = ?`, [id, req.userId]);
   res.status(201).json(created);
 });
 
 subjectsRouter.patch('/:id', async (req, res) => {
   const existing = await queryOne<Record<string, unknown>>(
-    `SELECT * FROM subjects WHERE id = ?`,
-    [req.params.id]
+    `SELECT * FROM subjects WHERE id = ? AND user_id = ?`,
+    [req.params.id, req.userId]
   );
   if (!existing) {
     res.status(404).json({ error: 'Subject not found' });
@@ -83,7 +87,7 @@ subjectsRouter.patch('/:id', async (req, res) => {
   await execute(
     `UPDATE subjects
      SET name = ?, color = ?, description = ?, notes_markdown = ?, transcript_markdown = ?, updated_at = ?
-     WHERE id = ?`,
+     WHERE id = ? AND user_id = ?`,
     [
       name ?? existing.name,
       color ?? existing.color,
@@ -92,15 +96,22 @@ subjectsRouter.patch('/:id', async (req, res) => {
       transcript_markdown ?? existing.transcript_markdown,
       now,
       req.params.id,
+      req.userId,
     ]
   );
 
-  const updated = await queryOne(`SELECT * FROM subjects WHERE id = ?`, [req.params.id]);
+  const updated = await queryOne(`SELECT * FROM subjects WHERE id = ? AND user_id = ?`, [
+    req.params.id,
+    req.userId,
+  ]);
   res.json(updated);
 });
 
 subjectsRouter.post('/:id/concepts', async (req, res) => {
-  const subject = await queryOne(`SELECT id FROM subjects WHERE id = ?`, [req.params.id]);
+  const subject = await queryOne(`SELECT id FROM subjects WHERE id = ? AND user_id = ?`, [
+    req.params.id,
+    req.userId,
+  ]);
   if (!subject) {
     res.status(404).json({ error: 'Subject not found' });
     return;
@@ -114,17 +125,18 @@ subjectsRouter.post('/:id/concepts', async (req, res) => {
   const now = new Date().toISOString();
 
   await execute(
-    `INSERT INTO concepts (id, subject_id, subtopic, title, summary, feynman_explanation, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, req.params.id, subtopic, title, summary, feynman_explanation, now]
+    `INSERT INTO concepts (id, user_id, subject_id, subtopic, title, summary, feynman_explanation, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, req.userId, req.params.id, subtopic, title, summary, feynman_explanation, now]
   );
 
   const cardId = crypto.randomUUID();
   await execute(
-    `INSERT INTO flashcards (id, subject_id, concept_id, subtopic, front, back, hint, interval_days, ease_factor, repetitions, lapses, step_index, due_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 1, 2.5, 0, 0, 0, ?, ?)`,
+    `INSERT INTO flashcards (id, user_id, subject_id, concept_id, subtopic, front, back, hint, interval_days, ease_factor, repetitions, lapses, step_index, due_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 2.5, 0, 0, 0, ?, ?)`,
     [
       cardId,
+      req.userId,
       req.params.id,
       id,
       subtopic,
@@ -136,6 +148,6 @@ subjectsRouter.post('/:id/concepts', async (req, res) => {
     ]
   );
 
-  const concept = await queryOne(`SELECT * FROM concepts WHERE id = ?`, [id]);
+  const concept = await queryOne(`SELECT * FROM concepts WHERE id = ? AND user_id = ?`, [id, req.userId]);
   res.status(201).json(concept);
 });

@@ -8,7 +8,7 @@ export type NotificationEventType =
   | 'manual_test';
 
 export interface AutomationSettingsRow {
-  id: number;
+  user_id: string;
   n8n_webhook_url: string;
   webhook_secret: string;
   whatsapp_enabled: number;
@@ -21,14 +21,18 @@ export interface AutomationSettingsRow {
 }
 
 export interface DispatchInput {
+  userId: string;
   eventType: NotificationEventType;
   title: string;
   message: string;
   payload: Record<string, unknown>;
 }
 
-export async function getAutomationSettings(): Promise<AutomationSettingsRow> {
-  const row = await queryOne<AutomationSettingsRow>(`SELECT * FROM automation_settings WHERE id = 1`);
+export async function getAutomationSettings(userId: string): Promise<AutomationSettingsRow> {
+  const row = await queryOne<AutomationSettingsRow>(
+    `SELECT * FROM automation_settings WHERE user_id = ?`,
+    [userId]
+  );
   return row!;
 }
 
@@ -37,7 +41,7 @@ export async function dispatchNotification(input: DispatchInput): Promise<{
   dispatchedChannels: string[];
   status: 'dispatched' | 'queued_local' | 'failed';
 }> {
-  const settings = await getAutomationSettings();
+  const settings = await getAutomationSettings(input.userId);
   const now = new Date().toISOString();
   const dispatchedChannels: string[] = [];
   let overallStatus: 'dispatched' | 'queued_local' | 'failed' = 'queued_local';
@@ -49,14 +53,16 @@ export async function dispatchNotification(input: DispatchInput): Promise<{
     timestamp: now,
     title: input.title,
     message: input.message,
+    whatsappRecipient: settings.whatsapp_recipient_phone || undefined,
     data: input.payload,
   };
 
-  const webhookUrl = settings.n8n_webhook_url || process.env.N8N_WEBHOOK_URL || '';
+  // Outbound n8n Webhook configured by this specific user
+  const webhookUrl = settings.n8n_webhook_url || '';
   if (webhookUrl) {
     try {
       const bodyStr = JSON.stringify(fullPayload);
-      const secret = settings.webhook_secret || process.env.WEBHOOK_SECRET || 'study-os-dev-secret';
+      const secret = settings.webhook_secret || 'study-os-dev-secret';
       const signature = crypto.createHmac('sha256', secret).update(bodyStr).digest('hex');
 
       const res = await fetch(webhookUrl, {
@@ -78,39 +84,6 @@ export async function dispatchNotification(input: DispatchInput): Promise<{
     }
   }
 
-  const waToken = process.env.WHATSAPP_TOKEN || '';
-  const waPhoneId = settings.whatsapp_phone_number_id || process.env.WHATSAPP_PHONE_NUMBER_ID || '';
-  const waRecipient = settings.whatsapp_recipient_phone || process.env.WHATSAPP_RECIPIENT_PHONE || '';
-
-  if (settings.whatsapp_enabled && waToken && waPhoneId && waRecipient) {
-    try {
-      const waRes = await fetch(`https://graph.facebook.com/v21.0/${waPhoneId}/messages`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${waToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: waRecipient,
-          type: 'text',
-          text: {
-            body: `*${input.title}*\n${input.message}`,
-          },
-        }),
-        signal: AbortSignal.timeout(6000),
-      });
-      lastStatusCode = waRes.status;
-      dispatchedChannels.push('whatsapp_cloud_api');
-      if (waRes.ok && overallStatus !== 'failed') {
-        overallStatus = 'dispatched';
-      }
-    } catch {
-      dispatchedChannels.push('whatsapp_cloud_api');
-      overallStatus = 'failed';
-    }
-  }
-
   if (settings.push_enabled) {
     dispatchedChannels.push('pwa_push');
     if (overallStatus === 'queued_local' && !webhookUrl) {
@@ -120,10 +93,11 @@ export async function dispatchNotification(input: DispatchInput): Promise<{
 
   const logId = crypto.randomUUID();
   await execute(
-    `INSERT INTO notification_logs (id, event_type, channel, title, message, payload_json, status, response_code, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO notification_logs (id, user_id, event_type, channel, title, message, payload_json, status, response_code, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       logId,
+      input.userId,
       input.eventType,
       dispatchedChannels.join(',') || 'pwa_push',
       input.title,

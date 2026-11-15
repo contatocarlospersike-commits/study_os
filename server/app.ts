@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
 import { ensureDatabaseReady } from './db.js';
+import { requireAuth } from './middleware/auth.js';
 import { subjectsRouter } from './routes/subjects.js';
 import { reviewsRouter } from './routes/reviews.js';
 import { quizzesRouter } from './routes/quizzes.js';
@@ -22,6 +23,9 @@ export function createApp() {
         ok: true,
         service: 'study-os-api',
         database: process.env.DATABASE_URL ? 'postgres' : 'sqlite',
+        auth: Boolean(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)
+          ? 'supabase'
+          : 'dev-local',
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -29,7 +33,6 @@ export function createApp() {
     }
   });
 
-  // Ensure DB schema + seed are initialized before handling API routes
   app.use('/api', async (_req, res, next) => {
     try {
       await ensureDatabaseReady();
@@ -39,6 +42,8 @@ export function createApp() {
     }
   });
 
+  app.use('/api', requireAuth);
+
   app.use('/api/subjects', subjectsRouter);
   app.use('/api/reviews', reviewsRouter);
   app.use('/api/quizzes', quizzesRouter);
@@ -46,7 +51,6 @@ export function createApp() {
   app.use('/api/automation', automationRouter);
   app.use('/api/analytics', analyticsRouter);
 
-  // Serve built SPA in standalone production (non-Vercel)
   const distDir = path.resolve(process.cwd(), 'dist');
   if (!process.env.VERCEL && process.env.NODE_ENV === 'production' && fs.existsSync(distDir)) {
     app.use(express.static(distDir));

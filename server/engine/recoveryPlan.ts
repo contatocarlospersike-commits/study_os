@@ -25,6 +25,7 @@ interface QuestionTemplate {
 }
 
 export async function generateRecoveryQuiz(
+  userId: string,
   subjectId: string,
   subjectName: string,
   weakSubtopics: string[]
@@ -34,11 +35,11 @@ export async function generateRecoveryQuiz(
   const label = weakSubtopics.slice(0, 2).join(' & ') || 'Core Concepts';
 
   await execute(
-    `INSERT INTO quizzes (id, subject_id, title, type, created_at) VALUES (?, ?, ?, 'recovery', ?)`,
-    [quizId, subjectId, `Recovery Plan: ${subjectName} — ${label}`, now]
+    `INSERT INTO quizzes (id, user_id, subject_id, title, type, created_at) VALUES (?, ?, ?, ?, 'recovery', ?)`,
+    [quizId, userId, subjectId, `Recovery Plan: ${subjectName} — ${label}`, now]
   );
 
-  const questions = await synthesizeQuestionsFromSubject(subjectId, subjectName, weakSubtopics, 5);
+  const questions = await synthesizeQuestionsFromSubject(userId, subjectId, subjectName, weakSubtopics, 5);
 
   for (const q of questions) {
     await execute(
@@ -60,6 +61,7 @@ export async function generateRecoveryQuiz(
 }
 
 export async function generateSessionAutoQuiz(
+  userId: string,
   subjectId: string,
   subjectName: string,
   subtopic: string,
@@ -70,12 +72,12 @@ export async function generateSessionAutoQuiz(
   const title = `Auto-Recall (5Q): ${subjectName} — ${subtopic}`;
 
   await execute(
-    `INSERT INTO quizzes (id, subject_id, title, type, source_session_id, created_at) VALUES (?, ?, ?, 'auto_session', ?, ?)`,
-    [quizId, subjectId, title, sessionId, now]
+    `INSERT INTO quizzes (id, user_id, subject_id, title, type, source_session_id, created_at) VALUES (?, ?, ?, ?, 'auto_session', ?, ?)`,
+    [quizId, userId, subjectId, title, sessionId, now]
   );
 
   const targets = subtopic && subtopic !== 'General' ? [subtopic] : [];
-  const questions = await synthesizeQuestionsFromSubject(subjectId, subjectName, targets, 5);
+  const questions = await synthesizeQuestionsFromSubject(userId, subjectId, subjectName, targets, 5);
 
   for (const q of questions) {
     await execute(
@@ -97,19 +99,20 @@ export async function generateSessionAutoQuiz(
 }
 
 async function synthesizeQuestionsFromSubject(
+  userId: string,
   subjectId: string,
   subjectName: string,
   preferredSubtopics: string[],
   count: number
 ): Promise<QuestionTemplate[]> {
   const concepts = await queryAll<ConceptRow>(
-    `SELECT id, subtopic, title, summary, feynman_explanation FROM concepts WHERE subject_id = ?`,
-    [subjectId]
+    `SELECT id, subtopic, title, summary, feynman_explanation FROM concepts WHERE subject_id = ? AND user_id = ?`,
+    [subjectId, userId]
   );
 
   const cards = await queryAll<FlashcardRow>(
-    `SELECT id, subtopic, front, back FROM flashcards WHERE subject_id = ?`,
-    [subjectId]
+    `SELECT id, subtopic, front, back FROM flashcards WHERE subject_id = ? AND user_id = ?`,
+    [subjectId, userId]
   );
 
   const existingQuestions = await queryAll<{
@@ -122,8 +125,8 @@ async function synthesizeQuestionsFromSubject(
     `SELECT qq.subtopic, qq.prompt, qq.options_json, qq.correct_index, qq.explanation
      FROM quiz_questions qq
      JOIN quizzes q ON q.id = qq.quiz_id
-     WHERE q.subject_id = ?`,
-    [subjectId]
+     WHERE q.subject_id = ? AND q.user_id = ?`,
+    [subjectId, userId]
   );
 
   const pool: QuestionTemplate[] = [];

@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabase';
 import type {
   AnalyticsData,
   AutomationSettings,
@@ -14,8 +15,20 @@ import type {
 } from '../types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const authHeaders: Record<string, string> = {};
+  if (supabase) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) {
+      authHeaders.Authorization = `Bearer ${data.session.access_token}`;
+    }
+  }
+
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+      ...(init?.headers || {}),
+    },
     ...init,
   });
   if (!res.ok) {

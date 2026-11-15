@@ -2,6 +2,7 @@ import { queryAll, queryOne } from '../db.js';
 import { dispatchNotification } from './dispatcher.js';
 
 interface DueSummaryRow {
+  user_id: string;
   subject_id: string;
   subject_name: string;
   subtopic: string;
@@ -10,19 +11,26 @@ interface DueSummaryRow {
 
 let timer: NodeJS.Timeout | null = null;
 
-export async function checkAndDispatchDueReviews(): Promise<{ triggered: number }> {
+export async function checkAndDispatchDueReviews(onlyUserId?: string): Promise<{ triggered: number }> {
   const nowIso = new Date().toISOString();
   const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
 
-  const dueGroups = await queryAll<DueSummaryRow>(
-    `SELECT f.subject_id, s.name as subject_name, f.subtopic, COUNT(*) as due_count
-     FROM flashcards f
-     JOIN subjects s ON s.id = f.subject_id
-     WHERE f.due_at <= ?
-     GROUP BY f.subject_id, s.name, f.subtopic
-     ORDER BY due_count DESC`,
-    [nowIso]
-  );
+  let sql = `
+    SELECT f.user_id, f.subject_id, s.name as subject_name, f.subtopic, COUNT(*) as due_count
+    FROM flashcards f
+    JOIN subjects s ON s.id = f.subject_id
+    WHERE f.due_at <= ?
+  `;
+  const params: unknown[] = [nowIso];
+
+  if (onlyUserId) {
+    sql += ` AND f.user_id = ?`;
+    params.push(onlyUserId);
+  }
+
+  sql += ` GROUP BY f.user_id, f.subject_id, s.name, f.subtopic ORDER BY due_count DESC`;
+
+  const dueGroups = await queryAll<DueSummaryRow>(sql, params);
 
   let triggered = 0;
 
@@ -31,16 +39,18 @@ export async function checkAndDispatchDueReviews(): Promise<{ triggered: number 
     const promptTitle = `Time for your Spaced Repetition review on ${group.subject_name}: ${group.subtopic}`;
     const existingRecent = await queryOne(
       `SELECT id FROM notification_logs
-       WHERE event_type = 'spaced_repetition_due'
+       WHERE user_id = ?
+         AND event_type = 'spaced_repetition_due'
          AND title = ?
          AND created_at >= ?
        LIMIT 1`,
-      [promptTitle, sixHoursAgo]
+      [group.user_id, promptTitle, sixHoursAgo]
     );
 
     if (existingRecent) continue;
 
     await dispatchNotification({
+      userId: group.user_id,
       eventType: 'spaced_repetition_due',
       title: promptTitle,
       message: `You have ${dueCount} card${dueCount > 1 ? 's' : ''} ready for retrieval practice in ${group.subject_name} (${group.subtopic}).`,

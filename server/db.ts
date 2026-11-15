@@ -90,18 +90,21 @@ export async function initDatabase(): Promise<void> {
   await execDDL(`
     CREATE TABLE IF NOT EXISTS subjects (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       name TEXT NOT NULL,
-      slug TEXT NOT NULL UNIQUE,
+      slug TEXT NOT NULL,
       color TEXT NOT NULL DEFAULT '#22d3ee',
       description TEXT NOT NULL DEFAULT '',
       notes_markdown TEXT NOT NULL DEFAULT '',
       transcript_markdown TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      UNIQUE (user_id, slug)
     );
 
     CREATE TABLE IF NOT EXISTS concepts (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
       subtopic TEXT NOT NULL,
       title TEXT NOT NULL,
@@ -112,6 +115,7 @@ export async function initDatabase(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS flashcards (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
       concept_id TEXT REFERENCES concepts(id) ON DELETE SET NULL,
       subtopic TEXT NOT NULL,
@@ -130,6 +134,7 @@ export async function initDatabase(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS quizzes (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'standard',
@@ -149,6 +154,7 @@ export async function initDatabase(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS quiz_attempts (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       quiz_id TEXT NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
       subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
       score_pct ${floatType} NOT NULL,
@@ -161,6 +167,7 @@ export async function initDatabase(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS recovery_plans (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
       attempt_id TEXT NOT NULL REFERENCES quiz_attempts(id) ON DELETE CASCADE,
       weak_subtopics_json TEXT NOT NULL,
@@ -172,6 +179,7 @@ export async function initDatabase(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS study_sessions (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
       subtopic TEXT NOT NULL DEFAULT 'General',
       mode TEXT NOT NULL DEFAULT 'deep_work',
@@ -183,7 +191,7 @@ export async function initDatabase(): Promise<void> {
     );
 
     CREATE TABLE IF NOT EXISTS automation_settings (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
+      user_id TEXT PRIMARY KEY,
       n8n_webhook_url TEXT NOT NULL DEFAULT '',
       webhook_secret TEXT NOT NULL DEFAULT 'study-os-dev-secret',
       whatsapp_enabled INTEGER NOT NULL DEFAULT 0,
@@ -197,6 +205,7 @@ export async function initDatabase(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS notification_logs (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       event_type TEXT NOT NULL,
       channel TEXT NOT NULL,
       title TEXT NOT NULL,
@@ -207,31 +216,35 @@ export async function initDatabase(): Promise<void> {
       created_at TEXT NOT NULL
     );
   `);
+}
+
+const seededUsers = new Set<string>();
+
+export async function ensureUserInitialized(userId: string): Promise<void> {
+  if (seededUsers.has(userId)) return;
 
   const now = new Date().toISOString();
   await execute(
     `INSERT INTO automation_settings (
-      id, n8n_webhook_url, webhook_secret, whatsapp_enabled,
+      user_id, n8n_webhook_url, webhook_secret, whatsapp_enabled,
       whatsapp_phone_number_id, whatsapp_recipient_phone,
       push_enabled, auto_quiz_on_session_end, recovery_threshold_pct, updated_at
-    ) VALUES (1, ?, ?, 0, ?, ?, 1, 1, 70, ?)
-    ON CONFLICT (id) DO NOTHING`,
-    [
-      process.env.N8N_WEBHOOK_URL || '',
-      process.env.WEBHOOK_SECRET || 'study-os-dev-secret',
-      process.env.WHATSAPP_PHONE_NUMBER_ID || '',
-      process.env.WHATSAPP_RECIPIENT_PHONE || '',
-      now,
-    ]
+    ) VALUES (?, '', 'study-os-dev-secret', 0, '', '', 1, 1, 70, ?)
+    ON CONFLICT (user_id) DO NOTHING`,
+    [userId, now]
   );
 
-  await seedIfEmpty();
+  const row = await queryOne<{ count: number | string }>(
+    'SELECT COUNT(*) as count FROM subjects WHERE user_id = ?',
+    [userId]
+  );
+  if (Number(row?.count ?? 0) === 0) {
+    await seedUser(userId);
+  }
+  seededUsers.add(userId);
 }
 
-async function seedIfEmpty(): Promise<void> {
-  const row = await queryOne<{ count: number | string }>('SELECT COUNT(*) as count FROM subjects');
-  if (Number(row?.count ?? 0) > 0) return;
-
+async function seedUser(userId: string): Promise<void> {
   const now = new Date();
   const isoNow = now.toISOString();
   const pastDue = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
@@ -242,12 +255,13 @@ async function seedIfEmpty(): Promise<void> {
   const cogSciId = crypto.randomUUID();
 
   const insertSubjectSql = `
-    INSERT INTO subjects (id, name, slug, color, description, notes_markdown, transcript_markdown, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO subjects (id, user_id, name, slug, color, description, notes_markdown, transcript_markdown, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   await execute(insertSubjectSql, [
     preCalcId,
+    userId,
     'Pre-Calculus',
     'pre-calculus',
     '#22d3ee',
@@ -260,6 +274,7 @@ async function seedIfEmpty(): Promise<void> {
 
   await execute(insertSubjectSql, [
     progId,
+    userId,
     'Programming & Systems',
     'programming-systems',
     '#a78bfa',
@@ -272,6 +287,7 @@ async function seedIfEmpty(): Promise<void> {
 
   await execute(insertSubjectSql, [
     cogSciId,
+    userId,
     'Cognitive Science',
     'cognitive-science',
     '#34d399',
@@ -283,8 +299,8 @@ async function seedIfEmpty(): Promise<void> {
   ]);
 
   const insertConceptSql = `
-    INSERT INTO concepts (id, subject_id, subtopic, title, summary, feynman_explanation, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO concepts (id, user_id, subject_id, subtopic, title, summary, feynman_explanation, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   const c1 = crypto.randomUUID();
@@ -294,6 +310,7 @@ async function seedIfEmpty(): Promise<void> {
 
   await execute(insertConceptSql, [
     c1,
+    userId,
     preCalcId,
     'Limits',
     'Removable Discontinuity vs. Jump Discontinuity',
@@ -303,6 +320,7 @@ async function seedIfEmpty(): Promise<void> {
   ]);
   await execute(insertConceptSql, [
     c2,
+    userId,
     preCalcId,
     'Trigonometric Limits',
     'Fundamental Trig Limit: sin(x)/x',
@@ -312,6 +330,7 @@ async function seedIfEmpty(): Promise<void> {
   ]);
   await execute(insertConceptSql, [
     c3,
+    userId,
     progId,
     'Event Loop',
     'Microtasks vs. Macrotasks Priority',
@@ -321,6 +340,7 @@ async function seedIfEmpty(): Promise<void> {
   ]);
   await execute(insertConceptSql, [
     c4,
+    userId,
     progId,
     'Algorithms',
     'Amortized O(1) Dynamic Array Append',
@@ -330,12 +350,13 @@ async function seedIfEmpty(): Promise<void> {
   ]);
 
   const insertCardSql = `
-    INSERT INTO flashcards (id, subject_id, concept_id, subtopic, front, back, hint, interval_days, ease_factor, repetitions, lapses, step_index, due_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO flashcards (id, user_id, subject_id, concept_id, subtopic, front, back, hint, interval_days, ease_factor, repetitions, lapses, step_index, due_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   await execute(insertCardSql, [
     crypto.randomUUID(),
+    userId,
     preCalcId,
     c1,
     'Limits',
@@ -352,6 +373,7 @@ async function seedIfEmpty(): Promise<void> {
   ]);
   await execute(insertCardSql, [
     crypto.randomUUID(),
+    userId,
     preCalcId,
     c2,
     'Trigonometric Limits',
@@ -368,6 +390,7 @@ async function seedIfEmpty(): Promise<void> {
   ]);
   await execute(insertCardSql, [
     crypto.randomUUID(),
+    userId,
     progId,
     c3,
     'Event Loop',
@@ -384,6 +407,7 @@ async function seedIfEmpty(): Promise<void> {
   ]);
   await execute(insertCardSql, [
     crypto.randomUUID(),
+    userId,
     progId,
     c4,
     'Algorithms',
@@ -403,12 +427,12 @@ async function seedIfEmpty(): Promise<void> {
   const quiz2Id = crypto.randomUUID();
 
   await execute(
-    `INSERT INTO quizzes (id, subject_id, title, type, created_at) VALUES (?, ?, ?, 'standard', ?)`,
-    [quiz1Id, preCalcId, 'Pre-Calculus: Limits & Continuity Diagnostic', isoNow]
+    `INSERT INTO quizzes (id, user_id, subject_id, title, type, created_at) VALUES (?, ?, ?, ?, 'standard', ?)`,
+    [quiz1Id, userId, preCalcId, 'Pre-Calculus: Limits & Continuity Diagnostic', isoNow]
   );
   await execute(
-    `INSERT INTO quizzes (id, subject_id, title, type, created_at) VALUES (?, ?, ?, 'standard', ?)`,
-    [quiz2Id, progId, 'Programming: Event Loop & Complexity Check', isoNow]
+    `INSERT INTO quizzes (id, user_id, subject_id, title, type, created_at) VALUES (?, ?, ?, ?, 'standard', ?)`,
+    [quiz2Id, userId, progId, 'Programming: Event Loop & Complexity Check', isoNow]
   );
 
   const insertQSql = `

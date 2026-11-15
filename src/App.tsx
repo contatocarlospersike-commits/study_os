@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import {
   BarChart3,
   BookOpen,
@@ -6,13 +7,16 @@ import {
   Download,
   LayoutDashboard,
   Layers,
+  LogOut,
   Sparkles,
   Webhook,
   Zap,
 } from 'lucide-react';
 import { api } from './api/client';
+import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { usePWA } from './hooks/usePWA';
 import { useStudySession } from './hooks/useStudySession';
+import { AuthGate } from './components/AuthGate';
 import { Dashboard } from './components/Dashboard';
 import { SubjectHub } from './components/SubjectHub';
 import { ActiveRecallQuiz } from './components/ActiveRecallQuiz';
@@ -22,6 +26,9 @@ import { AutomationCenter } from './components/AutomationCenter';
 import type { AnalyticsData, NavView, QuizSummary, RecoveryPlan, Subject } from './types';
 
 export function App() {
+  const [authSession, setAuthSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
+
   const [view, setView] = useState<NavView>(() => {
     const params = new URLSearchParams(window.location.search);
     const v = params.get('view') as NavView | null;
@@ -44,7 +51,23 @@ export function App() {
 
   const pwa = usePWA();
 
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthSession(data.session);
+      setAuthLoading(false);
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setAuthSession(nextSession);
+      setAuthLoading(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   const refreshAll = useCallback(async () => {
+    if (isSupabaseConfigured && !authSession) return;
     const [subs, qzs, plans, stats] = await Promise.all([
       api.getSubjects(),
       api.getQuizzes(),
@@ -55,11 +78,13 @@ export function App() {
     setQuizzes(qzs);
     setRecoveryPlans(plans);
     setAnalytics(stats);
-  }, []);
+  }, [authSession]);
 
   useEffect(() => {
-    void refreshAll();
-  }, [refreshAll]);
+    if (!authLoading && (!isSupabaseConfigured || authSession)) {
+      void refreshAll();
+    }
+  }, [authLoading, authSession, refreshAll]);
 
   const session = useStudySession((quizId, title) => {
     setAutoQuizBanner({ quizId, title });
@@ -71,10 +96,28 @@ export function App() {
     void refreshAll();
   });
 
+  if (authLoading) {
+    return (
+      <div className="app-shell flex items-center justify-center bg-zinc-950 text-zinc-400">
+        Carregando Study OS...
+      </div>
+    );
+  }
+
+  if (isSupabaseConfigured && !authSession) {
+    return <AuthGate />;
+  }
+
   const handleNavigate = (nextView: NavView, opts?: { subjectId?: string; quizId?: string }) => {
     if (opts?.subjectId) setSelectedSubjectId(opts.subjectId);
     if (opts?.quizId) setSelectedQuizId(opts.quizId);
     setView(nextView);
+  };
+
+  const handleSignOut = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
   };
 
   const navItems: Array<{ id: NavView; label: string; icon: typeof LayoutDashboard; badge?: number }> = [
@@ -142,6 +185,19 @@ export function App() {
               Install Study OS PWA
             </button>
           )}
+          {authSession?.user?.email && (
+            <div className="flex items-center justify-between gap-2 rounded-xl bg-zinc-900/70 px-3 py-2 text-xs text-zinc-300">
+              <span className="truncate">{authSession.user.email}</span>
+              <button
+                type="button"
+                aria-label="Sair"
+                onClick={handleSignOut}
+                className="shrink-0 rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           <div className="rounded-xl bg-zinc-900/70 px-3 py-2.5 text-[11px] text-zinc-400">
             <p className="font-semibold text-zinc-300">PWA Offline Ready</p>
             <p className="mt-0.5">Active Recall · SM-2 · n8n</p>
@@ -158,16 +214,29 @@ export function App() {
               <Brain className="h-5 w-5 text-cyan-400" />
               <span className="font-bold text-zinc-50">Study OS</span>
             </div>
-            {pwa.canInstall && (
-              <button
-                type="button"
-                onClick={pwa.promptInstall}
-                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-cyan-500/15 px-3 text-xs font-semibold text-cyan-300"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Install
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {pwa.canInstall && (
+                <button
+                  type="button"
+                  onClick={pwa.promptInstall}
+                  className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-cyan-500/15 px-3 text-xs font-semibold text-cyan-300"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Install
+                </button>
+              )}
+              {authSession && (
+                <button
+                  type="button"
+                  aria-label="Sair"
+                  onClick={handleSignOut}
+                  className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 text-xs text-zinc-300"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sair
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Auto-Quiz Notification Banner */}

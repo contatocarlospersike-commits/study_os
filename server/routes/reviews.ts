@@ -14,9 +14,9 @@ reviewsRouter.get('/', async (req, res) => {
     SELECT f.*, s.name as subject_name, s.color as subject_color
     FROM flashcards f
     JOIN subjects s ON s.id = f.subject_id
-    WHERE 1=1
+    WHERE f.user_id = ?
   `;
-  const params: unknown[] = [];
+  const params: unknown[] = [req.userId];
 
   if (onlyDue) {
     sql += ` AND f.due_at <= ?`;
@@ -38,19 +38,28 @@ reviewsRouter.post('/', async (req, res) => {
     res.status(400).json({ error: 'subject_id, front, and back are required' });
     return;
   }
+  const owned = await queryOne(`SELECT id FROM subjects WHERE id = ? AND user_id = ?`, [
+    subject_id,
+    req.userId,
+  ]);
+  if (!owned) {
+    res.status(404).json({ error: 'Subject not found' });
+    return;
+  }
+
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
 
   await execute(
-    `INSERT INTO flashcards (id, subject_id, subtopic, front, back, hint, interval_days, ease_factor, repetitions, lapses, step_index, due_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 1, 2.5, 0, 0, 0, ?, ?)`,
-    [id, subject_id, subtopic, front, back, hint, now, now]
+    `INSERT INTO flashcards (id, user_id, subject_id, subtopic, front, back, hint, interval_days, ease_factor, repetitions, lapses, step_index, due_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1, 2.5, 0, 0, 0, ?, ?)`,
+    [id, req.userId, subject_id, subtopic, front, back, hint, now, now]
   );
 
   const created = await queryOne(
     `SELECT f.*, s.name as subject_name, s.color as subject_color
-     FROM flashcards f JOIN subjects s ON s.id = f.subject_id WHERE f.id = ?`,
-    [id]
+     FROM flashcards f JOIN subjects s ON s.id = f.subject_id WHERE f.id = ? AND f.user_id = ?`,
+    [id, req.userId]
   );
   res.status(201).json(created);
 });
@@ -69,7 +78,7 @@ reviewsRouter.post('/:id/rate', async (req, res) => {
     repetitions: number;
     lapses: number;
     step_index: number;
-  }>(`SELECT * FROM flashcards WHERE id = ?`, [req.params.id]);
+  }>(`SELECT * FROM flashcards WHERE id = ? AND user_id = ?`, [req.params.id, req.userId]);
 
   if (!card) {
     res.status(404).json({ error: 'Flashcard not found' });
@@ -81,7 +90,7 @@ reviewsRouter.post('/:id/rate', async (req, res) => {
   await execute(
     `UPDATE flashcards
      SET interval_days = ?, ease_factor = ?, repetitions = ?, lapses = ?, step_index = ?, due_at = ?, last_reviewed_at = ?
-     WHERE id = ?`,
+     WHERE id = ? AND user_id = ?`,
     [
       next.interval_days,
       next.ease_factor,
@@ -91,13 +100,14 @@ reviewsRouter.post('/:id/rate', async (req, res) => {
       next.due_at,
       next.last_reviewed_at,
       card.id,
+      req.userId,
     ]
   );
 
   const updated = await queryOne(
     `SELECT f.*, s.name as subject_name, s.color as subject_color
-     FROM flashcards f JOIN subjects s ON s.id = f.subject_id WHERE f.id = ?`,
-    [card.id]
+     FROM flashcards f JOIN subjects s ON s.id = f.subject_id WHERE f.id = ? AND f.user_id = ?`,
+    [card.id, req.userId]
   );
 
   res.json(updated);

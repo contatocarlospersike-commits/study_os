@@ -5,12 +5,12 @@ import { checkAndDispatchDueReviews } from '../services/scheduler.js';
 
 export const automationRouter = Router();
 
-automationRouter.get('/settings', async (_req, res) => {
-  res.json(await getAutomationSettings());
+automationRouter.get('/settings', async (req, res) => {
+  res.json(await getAutomationSettings(req.userId));
 });
 
 automationRouter.patch('/settings', async (req, res) => {
-  const current = await getAutomationSettings();
+  const current = await getAutomationSettings(req.userId);
   const {
     n8n_webhook_url,
     webhook_secret,
@@ -28,7 +28,7 @@ automationRouter.patch('/settings', async (req, res) => {
      SET n8n_webhook_url = ?, webhook_secret = ?, whatsapp_enabled = ?,
          whatsapp_phone_number_id = ?, whatsapp_recipient_phone = ?,
          push_enabled = ?, auto_quiz_on_session_end = ?, recovery_threshold_pct = ?, updated_at = ?
-     WHERE id = 1`,
+     WHERE user_id = ?`,
     [
       n8n_webhook_url ?? current.n8n_webhook_url,
       webhook_secret ?? current.webhook_secret,
@@ -43,15 +43,17 @@ automationRouter.patch('/settings', async (req, res) => {
         : current.auto_quiz_on_session_end,
       typeof recovery_threshold_pct === 'number' ? recovery_threshold_pct : current.recovery_threshold_pct,
       now,
+      req.userId,
     ]
   );
 
-  res.json(await getAutomationSettings());
+  res.json(await getAutomationSettings(req.userId));
 });
 
-automationRouter.get('/logs', async (_req, res) => {
+automationRouter.get('/logs', async (req, res) => {
   const logs = await queryAll(
-    `SELECT * FROM notification_logs ORDER BY created_at DESC LIMIT 40`
+    `SELECT * FROM notification_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 40`,
+    [req.userId]
   );
   res.json(logs);
 });
@@ -63,6 +65,7 @@ automationRouter.post('/test-dispatch', async (req, res) => {
   } = req.body || {};
 
   const result = await dispatchNotification({
+    userId: req.userId,
     eventType: 'manual_test',
     title,
     message,
@@ -75,8 +78,8 @@ automationRouter.post('/test-dispatch', async (req, res) => {
   res.json(result);
 });
 
-automationRouter.all('/run-scheduler', async (_req, res) => {
-  const result = await checkAndDispatchDueReviews();
+automationRouter.all('/run-scheduler', async (req, res) => {
+  const result = await checkAndDispatchDueReviews(req.userId || undefined);
   res.json(result);
 });
 
@@ -92,19 +95,20 @@ automationRouter.post('/inbound', async (req, res) => {
 
 export const analyticsRouter = Router();
 
-analyticsRouter.get('/', async (_req, res) => {
+analyticsRouter.get('/', async (req, res) => {
   const nowIso = new Date().toISOString();
+  const uid = req.userId;
 
   const totalsRaw = await queryOne<Record<string, unknown>>(
     `SELECT
-      (SELECT COUNT(*) FROM subjects) as total_subjects,
-      (SELECT COUNT(*) FROM flashcards) as total_cards,
-      (SELECT COUNT(*) FROM flashcards WHERE due_at <= ?) as due_cards,
-      (SELECT COUNT(*) FROM quiz_attempts) as total_attempts,
-      (SELECT ROUND(AVG(score_pct)) FROM quiz_attempts) as avg_score_pct,
-      (SELECT COUNT(*) FROM recovery_plans WHERE status = 'pending') as pending_recoveries,
-      (SELECT COALESCE(SUM(duration_sec), 0) FROM study_sessions) as total_study_sec`,
-    [nowIso]
+      (SELECT COUNT(*) FROM subjects WHERE user_id = ?) as total_subjects,
+      (SELECT COUNT(*) FROM flashcards WHERE user_id = ?) as total_cards,
+      (SELECT COUNT(*) FROM flashcards WHERE user_id = ? AND due_at <= ?) as due_cards,
+      (SELECT COUNT(*) FROM quiz_attempts WHERE user_id = ?) as total_attempts,
+      (SELECT ROUND(AVG(score_pct)) FROM quiz_attempts WHERE user_id = ?) as avg_score_pct,
+      (SELECT COUNT(*) FROM recovery_plans WHERE user_id = ? AND status = 'pending') as pending_recoveries,
+      (SELECT COALESCE(SUM(duration_sec), 0) FROM study_sessions WHERE user_id = ?) as total_study_sec`,
+    [uid, uid, uid, nowIso, uid, uid, uid, uid]
   );
 
   const totals = {
@@ -122,13 +126,14 @@ analyticsRouter.get('/', async (_req, res) => {
 
   const bySubjectRaw = await queryAll<Record<string, unknown>>(
     `SELECT s.id, s.name, s.color,
-      (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id) as card_count,
-      (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id AND f.due_at <= ?) as due_count,
-      (SELECT ROUND(AVG(f.interval_days)) FROM flashcards f WHERE f.subject_id = s.id) as avg_interval_days,
-      (SELECT ROUND(AVG(qa.score_pct)) FROM quiz_attempts qa WHERE qa.subject_id = s.id) as avg_quiz_score
+      (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id AND f.user_id = s.user_id) as card_count,
+      (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id AND f.user_id = s.user_id AND f.due_at <= ?) as due_count,
+      (SELECT ROUND(AVG(f.interval_days)) FROM flashcards f WHERE f.subject_id = s.id AND f.user_id = s.user_id) as avg_interval_days,
+      (SELECT ROUND(AVG(qa.score_pct)) FROM quiz_attempts qa WHERE qa.subject_id = s.id AND qa.user_id = s.user_id) as avg_quiz_score
      FROM subjects s
+     WHERE s.user_id = ?
      ORDER BY s.name ASC`,
-    [nowIso]
+    [nowIso, uid]
   );
 
   const bySubject = bySubjectRaw.map((s) => ({
@@ -148,8 +153,10 @@ analyticsRouter.get('/', async (_req, res) => {
      FROM quiz_attempts qa
      JOIN quizzes q ON q.id = qa.quiz_id
      JOIN subjects s ON s.id = qa.subject_id
+     WHERE qa.user_id = ?
      ORDER BY qa.completed_at DESC
-     LIMIT 12`
+     LIMIT 12`,
+    [uid]
   );
 
   const bucketsRaw = await queryOne<Record<string, unknown>>(
@@ -159,7 +166,9 @@ analyticsRouter.get('/', async (_req, res) => {
       SUM(CASE WHEN interval_days > 3 AND interval_days <= 7 THEN 1 ELSE 0 END) as d7,
       SUM(CASE WHEN interval_days > 7 AND interval_days <= 15 THEN 1 ELSE 0 END) as d15,
       SUM(CASE WHEN interval_days > 15 THEN 1 ELSE 0 END) as d30_plus
-     FROM flashcards`
+     FROM flashcards
+     WHERE user_id = ?`,
+    [uid]
   );
 
   const intervalBuckets = {
