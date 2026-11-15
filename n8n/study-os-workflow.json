@@ -92,6 +92,26 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "https://YOUR_EVOLUTION_API_HOST/message/sendText/YOUR_INSTANCE_NAME",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "YOUR_EVOLUTION_API_KEY" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: 'YOUR_RECIPIENT_E164', text: '*' + ($json.body.title || 'Study OS') + '*\\n' + ($json.body.message || '') }) }}"
+      },
+      "id": "evolution-whatsapp-dispatch",
+      "name": "Evolution API (WhatsApp QR Code)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [760, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "http://localhost:3001/api/automation/inbound",
         "sendBody": true,
         "specifyBody": "json",
@@ -110,8 +130,14 @@
     },
     "Route Study OS Event": {
       "main": [
-        [{ "node": "WhatsApp Cloud API Dispatch", "type": "main", "index": 0 }],
-        [{ "node": "WhatsApp Cloud API Dispatch", "type": "main", "index": 0 }]
+        [
+          { "node": "Evolution API (WhatsApp QR Code)", "type": "main", "index": 0 },
+          { "node": "WhatsApp Cloud API Dispatch", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Evolution API (WhatsApp QR Code)", "type": "main", "index": 0 },
+          { "node": "WhatsApp Cloud API Dispatch", "type": "main", "index": 0 }
+        ]
       ]
     },
     "Every 6h SR Poll": {

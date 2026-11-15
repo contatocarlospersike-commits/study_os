@@ -11,11 +11,11 @@ export function AnalyticsView({ analytics }: AnalyticsViewProps) {
   }
 
   const buckets = [
-    { label: '1d (New / Reset)', count: analytics.intervalBuckets.d1 || 0, color: 'bg-rose-400' },
-    { label: '3d (Early)', count: analytics.intervalBuckets.d3 || 0, color: 'bg-amber-400' },
-    { label: '7d (Consolidating)', count: analytics.intervalBuckets.d7 || 0, color: 'bg-cyan-400' },
-    { label: '15d (Strong)', count: analytics.intervalBuckets.d15 || 0, color: 'bg-violet-400' },
-    { label: '30d+ (Mastered)', count: analytics.intervalBuckets.d30_plus || 0, color: 'bg-emerald-400' },
+    { label: '1d (Novo / Reiniciado)', count: analytics.intervalBuckets.d1 || 0, color: 'bg-rose-400' },
+    { label: '3d (Inicial)', count: analytics.intervalBuckets.d3 || 0, color: 'bg-amber-400' },
+    { label: '7d (Consolidando)', count: analytics.intervalBuckets.d7 || 0, color: 'bg-cyan-400' },
+    { label: '15d (Forte)', count: analytics.intervalBuckets.d15 || 0, color: 'bg-violet-400' },
+    { label: '30d+ (Dominado)', count: analytics.intervalBuckets.d30_plus || 0, color: 'bg-emerald-400' },
   ];
   const maxBucket = Math.max(1, ...buckets.map((b) => b.count));
 
@@ -23,9 +23,9 @@ export function AnalyticsView({ analytics }: AnalyticsViewProps) {
     <div className="space-y-6">
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-emerald-400">
-          Retention & Mastery Telemetry
+          Telemetria de Retenção & Domínio
         </p>
-        <h1 className="heading-fluid font-bold text-zinc-50">Learning Analytics</h1>
+        <h1 className="heading-fluid font-bold text-zinc-50">Métricas de Aprendizado</h1>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">

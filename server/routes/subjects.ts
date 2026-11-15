@@ -43,7 +43,18 @@ subjectsRouter.get('/:id', async (req, res) => {
     `SELECT * FROM flashcards WHERE subject_id = ? AND user_id = ? ORDER BY due_at ASC`,
     [req.params.id, req.userId]
   );
-  res.json({ ...subject, concepts, flashcards });
+  const subjectNameLower = String((subject as { name?: string }).name ?? '').toLowerCase();
+  const backlinks = await queryAll(
+    `SELECT nl.id, nl.source_subject_id, s.name as source_subject_name, s.color as source_subject_color, nl.target_label, nl.created_at
+     FROM note_links nl
+     JOIN subjects s ON s.id = nl.source_subject_id
+     WHERE nl.user_id = ?
+       AND nl.source_subject_id != ?
+       AND (nl.target_subject_id = ? OR LOWER(nl.target_label) = ?)
+     ORDER BY nl.created_at DESC`,
+    [req.userId, req.params.id, req.params.id, subjectNameLower]
+  );
+  res.json({ ...subject, concepts, flashcards, backlinks });
 });
 
 subjectsRouter.post('/', async (req, res) => {
@@ -84,6 +95,8 @@ subjectsRouter.patch('/:id', async (req, res) => {
   const { name, color, description, notes_markdown, transcript_markdown } = req.body;
   const now = new Date().toISOString();
 
+  const nextNotes = String(notes_markdown ?? existing.notes_markdown ?? '');
+
   await execute(
     `UPDATE subjects
      SET name = ?, color = ?, description = ?, notes_markdown = ?, transcript_markdown = ?, updated_at = ?
@@ -92,13 +105,46 @@ subjectsRouter.patch('/:id', async (req, res) => {
       name ?? existing.name,
       color ?? existing.color,
       description ?? existing.description,
-      notes_markdown ?? existing.notes_markdown,
+      nextNotes,
       transcript_markdown ?? existing.transcript_markdown,
       now,
       req.params.id,
       req.userId,
     ]
   );
+
+  // Sync Obsidian-style [[wikilinks]] into note_links
+  if (notes_markdown !== undefined) {
+    await execute(`DELETE FROM note_links WHERE source_subject_id = ? AND user_id = ?`, [
+      req.params.id,
+      req.userId,
+    ]);
+    const matches = [...nextNotes.matchAll(/\[\[([^\]]+)\]\]/g)].map((m) => m[1].trim()).filter(Boolean);
+    const uniqueLabels = Array.from(new Map(matches.map((l) => [l.toLowerCase(), l])).values());
+    if (uniqueLabels.length > 0) {
+      const allSubjects = await queryAll<{ id: string; name: string }>(
+        `SELECT id, name FROM subjects WHERE user_id = ?`,
+        [req.userId]
+      );
+      const allConcepts = await queryAll<{ title: string; subject_id: string }>(
+        `SELECT title, subject_id FROM concepts WHERE user_id = ?`,
+        [req.userId]
+      );
+      for (const label of uniqueLabels) {
+        const lower = label.toLowerCase();
+        const matchedSubject = allSubjects.find((s) => s.name.toLowerCase() === lower);
+        const matchedConcept = matchedSubject
+          ? null
+          : allConcepts.find((c) => c.title.toLowerCase() === lower);
+        const targetSubjectId = matchedSubject?.id ?? matchedConcept?.subject_id ?? null;
+        await execute(
+          `INSERT INTO note_links (id, user_id, source_subject_id, target_label, target_subject_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [crypto.randomUUID(), req.userId, req.params.id, label, targetSubjectId, now]
+        );
+      }
+    }
+  }
 
   const updated = await queryOne(`SELECT * FROM subjects WHERE id = ? AND user_id = ?`, [
     req.params.id,

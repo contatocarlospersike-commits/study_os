@@ -64,9 +64,9 @@ export function ActiveRecallQuiz({
     <div className="space-y-6">
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">
-          Retrieval Practice & Remediation
+          Prática de Recuperação & Reforço
         </p>
-        <h1 className="heading-fluid font-bold text-zinc-50">Active Recall Quizzes</h1>
+        <h1 className="heading-fluid font-bold text-zinc-50">Quizzes (Active Recall)</h1>
       </div>
 
       {/* Swipeable Quiz Selector */}
@@ -95,7 +95,7 @@ export function ActiveRecallQuiz({
                         : 'bg-cyan-500/15 text-cyan-300'
                   }`}
                 >
-                  {q.type === 'recovery' ? 'Recovery' : q.type === 'auto_session' ? 'Auto 5Q' : 'Standard'}
+                  {q.type === 'recovery' ? 'Recuperação' : q.type === 'auto_session' ? 'Auto 5Q' : 'Padrão'}
                 </span>
               </div>
               <span className="mt-1.5 line-clamp-2 text-sm font-semibold">{q.title}</span>

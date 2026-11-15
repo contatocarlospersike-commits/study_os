@@ -277,6 +277,53 @@ export async function initDatabase(): Promise<void> {
       follow_up_json TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS books (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      subject_id TEXT REFERENCES subjects(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      author TEXT NOT NULL DEFAULT '',
+      source_type TEXT NOT NULL DEFAULT 'pearson',
+      external_url TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'to_read',
+      current_page INTEGER NOT NULL DEFAULT 0,
+      total_pages INTEGER NOT NULL DEFAULT 100,
+      summary_markdown TEXT NOT NULL DEFAULT '',
+      insights_markdown TEXT NOT NULL DEFAULT '',
+      selective_plan_markdown TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS note_links (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      source_subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+      target_label TEXT NOT NULL,
+      target_subject_id TEXT REFERENCES subjects(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS learning_profile (
+      user_id TEXT PRIMARY KEY,
+      preferred_block_min INTEGER NOT NULL DEFAULT 25,
+      visual_preference INTEGER NOT NULL DEFAULT 1,
+      frequent_questions INTEGER NOT NULL DEFAULT 1,
+      english_level TEXT NOT NULL DEFAULT 'intermediate',
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS study_checkins (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      session_id TEXT REFERENCES study_sessions(id) ON DELETE SET NULL,
+      block_mode TEXT NOT NULL DEFAULT 'deep_work',
+      duration_min INTEGER NOT NULL DEFAULT 25,
+      energy_level INTEGER NOT NULL DEFAULT 3,
+      focus_level INTEGER NOT NULL DEFAULT 3,
+      created_at TEXT NOT NULL
+    );
   `);
 
   if (isPostgres) {
@@ -300,6 +347,13 @@ export async function ensureUserInitialized(userId: string): Promise<void> {
       push_enabled, auto_quiz_on_session_end, recovery_threshold_pct, updated_at
     ) VALUES (?, '', 'study-os-dev-secret', 0, '', '', 1, 1, 70, ?)
     ON CONFLICT (user_id) DO NOTHING`,
+    [userId, now]
+  );
+
+  await execute(
+    `INSERT INTO learning_profile (user_id, preferred_block_min, visual_preference, frequent_questions, english_level, updated_at)
+     VALUES (?, 25, 1, 1, 'intermediate', ?)
+     ON CONFLICT (user_id) DO NOTHING`,
     [userId, now]
   );
 

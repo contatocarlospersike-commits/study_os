@@ -10,6 +10,8 @@ import { quizzesRouter } from './routes/quizzes.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { automationRouter, analyticsRouter } from './routes/automation.js';
 import { chatRouter, materialsRouter } from './routes/rag.js';
+import { libraryRouter } from './routes/library.js';
+import { cognitiveRouter } from './routes/cognitive.js';
 
 export function createApp() {
   const app = express();
@@ -53,6 +55,8 @@ export function createApp() {
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/materials', materialsRouter);
   app.use('/api/chat', chatRouter);
+  app.use('/api/library', libraryRouter);
+  app.use('/api/cognitive', cognitiveRouter);
 
   app.use('/api', (err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error('[Study OS API Error]', err);

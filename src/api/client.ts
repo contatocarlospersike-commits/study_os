@@ -2,12 +2,19 @@ import { supabase } from '../lib/supabase';
 import type {
   AnalyticsData,
   AutomationSettings,
+  Book,
   ChatMessage,
   ChatThread,
   Concept,
+  DailyPlanResponse,
   Flashcard,
+  GraphData,
+  LearningProfile,
   Material,
   NotificationLog,
+  OpenCatalogItem,
+  ProfessorEvaluation,
+  ProfessorLesson,
   QuizAttemptResult,
   QuizDetail,
   QuizSummary,
@@ -15,6 +22,7 @@ import type {
   StudySession,
   Subject,
   SubjectDetail,
+  TriageResult,
 } from '../types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -122,4 +130,72 @@ export const api = {
     message: string;
     english_practice_mode?: boolean;
   }) => request<{ threadId: string; message: ChatMessage }>('/api/chat', { method: 'POST', body: JSON.stringify(body) }),
+
+  // Library & Inbox ("Jogar o Grosso")
+  getBooks: () => request<Book[]>('/api/library/books'),
+  getOpenCatalog: () => request<OpenCatalogItem[]>('/api/library/open-catalog'),
+  createBook: (body: Partial<Book> & { title: string }) =>
+    request<Book>('/api/library/books', { method: 'POST', body: JSON.stringify(body) }),
+  updateBook: (id: string, body: Partial<Book>) =>
+    request<Book>(`/api/library/books/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteBook: (id: string) => request<{ ok: boolean }>(`/api/library/books/${id}`, { method: 'DELETE' }),
+  generateSelectivePlan: (bookId: string, body: { exam_goal: string; toc_text?: string }) =>
+    request<{ plan: string }>(`/api/library/books/${bookId}/selective-plan`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  triageInbox: (body: {
+    title: string;
+    file_type?: 'pdf' | 'text';
+    content_base64?: string;
+    text_content?: string;
+    subject_id?: string | null;
+  }) => request<TriageResult>('/api/library/inbox/triage', { method: 'POST', body: JSON.stringify(body) }),
+
+  // Cognitive: Graph, AI Links, Professor, Planner, Profile & Check-ins
+  getGraph: () => request<GraphData>('/api/cognitive/graph'),
+  suggestNoteLinks: (subjectId: string) =>
+    request<{ suggestions: Array<{ label: string; reason: string; targetSubject: string }> }>(
+      `/api/cognitive/subjects/${subjectId}/suggest-links`,
+      { method: 'POST' }
+    ),
+  generateProfessorLesson: (body: { subject_id: string; topic: string }) =>
+    request<ProfessorLesson>('/api/cognitive/professor/lesson', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  evaluateProfessorExplanation: (body: {
+    subject_id: string;
+    topic: string;
+    user_explanation: string;
+  }) =>
+    request<ProfessorEvaluation>('/api/cognitive/professor/evaluate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  generateDailyPlan: (body: { available_minutes: number }) =>
+    request<DailyPlanResponse>('/api/cognitive/planner/today', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getLearningProfile: async () => {
+    const res = await request<{ profile: LearningProfile }>('/api/cognitive/profile');
+    return res.profile;
+  },
+  updateLearningProfile: (body: Partial<LearningProfile>) =>
+    request<LearningProfile>('/api/cognitive/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  createCheckin: (body: {
+    session_id?: string;
+    block_mode?: string;
+    duration_min?: number;
+    energy_level: number;
+    focus_level: number;
+  }) =>
+    request<{ ok: boolean; id: string }>('/api/cognitive/checkins', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

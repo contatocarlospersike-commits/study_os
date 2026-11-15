@@ -74,9 +74,9 @@ export function AutomationCenter({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-violet-400">
-            n8n · WhatsApp Cloud API · Web Push
+            n8n · Evolution API (WhatsApp QR Code) · Web Push
           </p>
-          <h1 className="heading-fluid font-bold text-zinc-50">Automation & Webhooks</h1>
+          <h1 className="heading-fluid font-bold text-zinc-50">Automações & Webhooks</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -85,7 +85,7 @@ export function AutomationCenter({
             className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-800"
           >
             <Play className="h-3.5 w-3.5 text-emerald-400" />
-            Run SR Check Now
+            Checar Revisões Agora
           </button>
           <button
             type="button"

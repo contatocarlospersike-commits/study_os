@@ -1,4 +1,123 @@
-export type NavView = 'dashboard' | 'subjects' | 'tutor' | 'quizzes' | 'reviews' | 'analytics' | 'automation';
+export type NavView =
+  | 'dashboard'
+  | 'subjects'
+  | 'library'
+  | 'tutor'
+  | 'professor'
+  | 'quizzes'
+  | 'reviews'
+  | 'analytics'
+  | 'automation';
+
+export interface Book {
+  id: string;
+  subject_id: string | null;
+  subject_name?: string | null;
+  subject_color?: string | null;
+  title: string;
+  author: string;
+  source_type: 'pearson' | 'open_access' | 'pdf' | 'physical';
+  external_url: string;
+  status: 'to_read' | 'reading' | 'read';
+  current_page: number;
+  total_pages: number;
+  summary_markdown: string;
+  insights_markdown: string;
+  selective_plan_markdown: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OpenCatalogItem {
+  id: string;
+  title: string;
+  author: string;
+  category: string;
+  total_pages: number;
+  source_type: 'open_access';
+  external_url: string;
+  description: string;
+}
+
+export interface BacklinkItem {
+  id: string;
+  source_subject_id: string;
+  source_subject_name: string;
+  source_subject_color: string;
+  target_label: string;
+  created_at: string;
+}
+
+export interface GraphData {
+  subjects: Array<{ id: string; name: string; color: string }>;
+  links: Array<{
+    id: string;
+    source_subject_id: string;
+    target_label: string;
+    target_subject_id: string | null;
+  }>;
+}
+
+export interface LearningProfile {
+  user_id: string;
+  preferred_block_min: number;
+  visual_preference: number;
+  frequent_questions: number;
+  english_level: 'beginner' | 'intermediate' | 'advanced';
+  updated_at: string;
+}
+
+export interface ProfessorLesson {
+  title: string;
+  analogy: string;
+  coreExplanation: string;
+  mermaidDiagram: string;
+  checkpointQuestion: string;
+  englishTermTip: string;
+}
+
+export interface ProfessorEvaluation {
+  score: number;
+  strengths: string[];
+  gaps: string[];
+  correctedExplanation: string;
+  nextStep: string;
+}
+
+export interface DailyPlanResponse {
+  availableMinutes: number;
+  recommendedBlockMin: number;
+  summary: string;
+  blocks: Array<{
+    order: number;
+    durationMin: number;
+    actionType: 'review' | 'quiz' | 'feynman' | 'reading' | 'rag_chat';
+    subjectName: string;
+    title: string;
+    reason: string;
+  }>;
+}
+
+export interface TriageResult {
+  classification: {
+    subjectId: string | null;
+    subjectName: string;
+    isNewSubject: boolean;
+    subtopic: string;
+    concepts: Array<{ title: string; summary: string }>;
+    flashcards: Array<{ front: string; back: string; hint: string }>;
+    quizQuestions: Array<{
+      prompt: string;
+      options: string[];
+      correctIndex: number;
+      explanation: string;
+    }>;
+  };
+  materialId: string | null;
+  createdConcepts: number;
+  createdFlashcards: number;
+  createdQuizId: string | null;
+}
 
 export interface Material {
   id: string;
@@ -66,6 +185,7 @@ export interface Concept {
 export interface SubjectDetail extends Subject {
   concepts: Concept[];
   flashcards: Flashcard[];
+  backlinks?: BacklinkItem[];
 }
 
 export interface Flashcard {

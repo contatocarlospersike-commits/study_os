@@ -6,8 +6,10 @@ import {
   Bot,
   Brain,
   Download,
+  GraduationCap,
   LayoutDashboard,
   Layers,
+  Library,
   LogOut,
   Sparkles,
   Webhook,
@@ -20,7 +22,9 @@ import { useStudySession } from './hooks/useStudySession';
 import { AuthGate } from './components/AuthGate';
 import { Dashboard } from './components/Dashboard';
 import { SubjectHub } from './components/SubjectHub';
+import { LibraryInbox } from './components/LibraryInbox';
 import { AiTutorChat } from './components/AiTutorChat';
+import { ProfessorPlanner } from './components/ProfessorPlanner';
 import { ActiveRecallQuiz } from './components/ActiveRecallQuiz';
 import { SpacedRepetitionQueue } from './components/SpacedRepetitionQueue';
 import { AnalyticsView } from './components/AnalyticsView';
@@ -34,7 +38,20 @@ export function App() {
   const [view, setView] = useState<NavView>(() => {
     const params = new URLSearchParams(window.location.search);
     const v = params.get('view') as NavView | null;
-    if (v && ['dashboard', 'subjects', 'tutor', 'quizzes', 'reviews', 'analytics', 'automation'].includes(v)) {
+    if (
+      v &&
+      [
+        'dashboard',
+        'subjects',
+        'library',
+        'tutor',
+        'professor',
+        'quizzes',
+        'reviews',
+        'analytics',
+        'automation',
+      ].includes(v)
+    ) {
       return v;
     }
     return 'dashboard';
@@ -50,6 +67,12 @@ export function App() {
   const [recoveryPlans, setRecoveryPlans] = useState<RecoveryPlan[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [autoQuizBanner, setAutoQuizBanner] = useState<{ quizId: string; title: string } | null>(null);
+  const [toast, setToast] = useState<{ title: string; msg: string } | null>(null);
+
+  const notify = useCallback((title: string, msg: string) => {
+    setToast({ title, msg });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
 
   const pwa = usePWA();
 
@@ -125,7 +148,9 @@ export function App() {
   const navItems: Array<{ id: NavView; label: string; icon: typeof LayoutDashboard; badge?: number }> = [
     { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
     { id: 'subjects', label: 'Matérias', icon: BookOpen },
+    { id: 'library', label: 'Biblioteca', icon: Library },
     { id: 'tutor', label: 'Tutor IA', icon: Bot },
+    { id: 'professor', label: 'Professor', icon: GraduationCap },
     { id: 'quizzes', label: 'Quizzes', icon: Zap },
     { id: 'reviews', label: 'Revisões', icon: Layers, badge: analytics?.totals.due_cards || 0 },
     { id: 'analytics', label: 'Métricas', icon: BarChart3 },
@@ -304,7 +329,13 @@ export function App() {
             />
           )}
 
+          {view === 'library' && (
+            <LibraryInbox subjects={subjects} onDataChanged={refreshAll} onNotify={notify} />
+          )}
+
           {view === 'tutor' && <AiTutorChat subjects={subjects} />}
+
+          {view === 'professor' && <ProfessorPlanner subjects={subjects} onNotify={notify} />}
 
           {view === 'quizzes' && (
             <ActiveRecallQuiz
@@ -330,10 +361,18 @@ export function App() {
         </div>
       </main>
 
+      {/* Toast feedback */}
+      {toast && (
+        <div className="fixed right-4 top-4 z-50 max-w-xs rounded-xl border border-cyan-500/40 bg-zinc-900/95 px-4 py-3 shadow-xl backdrop-blur">
+          <div className="text-xs font-semibold text-cyan-300">{toast.title}</div>
+          <div className="mt-0.5 text-xs text-zinc-200">{toast.msg}</div>
+        </div>
+      )}
+
       {/* Mobile Bottom Navigation */}
       <nav
-        aria-label="Mobile Navigation"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-zinc-800 bg-zinc-950/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden"
+        aria-label="Navegação Mobile"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-center gap-1 overflow-x-auto border-t border-zinc-800 bg-zinc-950/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden"
       >
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -343,7 +382,7 @@ export function App() {
               key={item.id}
               type="button"
               onClick={() => handleNavigate(item.id)}
-              className={`relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-medium ${
+              className={`relative flex min-h-[44px] min-w-[64px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2 text-[10px] font-medium ${
                 active ? 'text-cyan-400' : 'text-zinc-400'
               }`}
             >
