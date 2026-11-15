@@ -2,8 +2,11 @@ import { supabase } from '../lib/supabase';
 import type {
   AnalyticsData,
   AutomationSettings,
+  ChatMessage,
+  ChatThread,
   Concept,
   Flashcard,
+  Material,
   NotificationLog,
   QuizAttemptResult,
   QuizDetail,
@@ -99,4 +102,24 @@ export const api = {
       body: JSON.stringify(body || {}),
     }),
   runSchedulerNow: () => request<{ triggered: number }>('/api/automation/run-scheduler', { method: 'POST' }),
+
+  getMaterials: (subjectId?: string) =>
+    request<Material[]>(subjectId ? `/api/materials?subjectId=${subjectId}` : '/api/materials'),
+  ingestMaterial: (body: {
+    title: string;
+    subject_id: string | null;
+    file_type: 'pdf' | 'text';
+    content_base64?: string;
+    text_content?: string;
+  }) => request<Material>('/api/materials/ingest', { method: 'POST', body: JSON.stringify(body) }),
+  deleteMaterial: (id: string) => request<{ ok: boolean }>(`/api/materials/${id}`, { method: 'DELETE' }),
+
+  getChatThreads: () => request<ChatThread[]>('/api/chat/threads'),
+  getChatMessages: (threadId: string) => request<ChatMessage[]>(`/api/chat/threads/${threadId}/messages`),
+  sendChatMessage: (body: {
+    thread_id?: string;
+    subject_id?: string | null;
+    message: string;
+    english_practice_mode?: boolean;
+  }) => request<{ threadId: string; message: ChatMessage }>('/api/chat', { method: 'POST', body: JSON.stringify(body) }),
 };

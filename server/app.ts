@@ -9,12 +9,13 @@ import { reviewsRouter } from './routes/reviews.js';
 import { quizzesRouter } from './routes/quizzes.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { automationRouter, analyticsRouter } from './routes/automation.js';
+import { chatRouter, materialsRouter } from './routes/rag.js';
 
 export function createApp() {
   const app = express();
 
   app.use(cors());
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '15mb' }));
 
   app.get('/api/health', async (_req, res) => {
     try {
@@ -50,6 +51,13 @@ export function createApp() {
   app.use('/api/sessions', sessionsRouter);
   app.use('/api/automation', automationRouter);
   app.use('/api/analytics', analyticsRouter);
+  app.use('/api/materials', materialsRouter);
+  app.use('/api/chat', chatRouter);
+
+  app.use('/api', (err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('[Study OS API Error]', err);
+    res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+  });
 
   const distDir = path.resolve(process.cwd(), 'dist');
   if (!process.env.VERCEL && process.env.NODE_ENV === 'production' && fs.existsSync(distDir)) {

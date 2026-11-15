@@ -80,12 +80,26 @@ export function ensureDatabaseReady(): Promise<void> {
   return initPromise;
 }
 
+export const isPostgresDb = isPostgres;
+
 export async function initDatabase(): Promise<void> {
   if (!isPostgres && sqliteDb) {
     sqliteDb.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   }
 
+  if (isPostgres) {
+    try {
+      await execDDL('CREATE EXTENSION IF NOT EXISTS vector;');
+    } catch (err) {
+      console.warn('[Study OS DB] Could not auto-enable pgvector extension:', (err as Error).message);
+    }
+  }
+
   const floatType = isPostgres ? 'DOUBLE PRECISION' : 'REAL';
+  const vectorCol = isPostgres ? 'embedding vector(768),' : 'embedding_json TEXT,';
+  const tsvCol = isPostgres
+    ? `tsv tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(content, ''))) STORED,`
+    : '';
 
   await execDDL(`
     CREATE TABLE IF NOT EXISTS subjects (
@@ -215,7 +229,62 @@ export async function initDatabase(): Promise<void> {
       response_code INTEGER,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS materials (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      subject_id TEXT REFERENCES subjects(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      file_type TEXT NOT NULL DEFAULT 'pdf',
+      page_count INTEGER NOT NULL DEFAULT 1,
+      chunk_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'ready',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS document_chunks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      material_id TEXT NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+      subject_id TEXT REFERENCES subjects(id) ON DELETE SET NULL,
+      page_number INTEGER NOT NULL DEFAULT 1,
+      chunk_index INTEGER NOT NULL DEFAULT 0,
+      content TEXT NOT NULL,
+      ${vectorCol}
+      ${tsvCol}
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_threads (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      subject_id TEXT REFERENCES subjects(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      citations_json TEXT NOT NULL DEFAULT '[]',
+      mermaid_diagram TEXT NOT NULL DEFAULT '',
+      grounding_status TEXT NOT NULL DEFAULT 'grounded',
+      verified_by_critic INTEGER NOT NULL DEFAULT 0,
+      follow_up_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL
+    );
   `);
+
+  if (isPostgres) {
+    await execDDL(`
+      CREATE INDEX IF NOT EXISTS idx_document_chunks_tsv ON document_chunks USING GIN (tsv);
+      CREATE INDEX IF NOT EXISTS idx_document_chunks_user ON document_chunks (user_id, subject_id);
+    `);
+  }
 }
 
 const seededUsers = new Set<string>();

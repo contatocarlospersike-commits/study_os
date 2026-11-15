@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import {
   BarChart3,
   BookOpen,
+  Bot,
   Brain,
   Download,
   LayoutDashboard,
@@ -19,6 +20,7 @@ import { useStudySession } from './hooks/useStudySession';
 import { AuthGate } from './components/AuthGate';
 import { Dashboard } from './components/Dashboard';
 import { SubjectHub } from './components/SubjectHub';
+import { AiTutorChat } from './components/AiTutorChat';
 import { ActiveRecallQuiz } from './components/ActiveRecallQuiz';
 import { SpacedRepetitionQueue } from './components/SpacedRepetitionQueue';
 import { AnalyticsView } from './components/AnalyticsView';
@@ -32,7 +34,7 @@ export function App() {
   const [view, setView] = useState<NavView>(() => {
     const params = new URLSearchParams(window.location.search);
     const v = params.get('view') as NavView | null;
-    if (v && ['dashboard', 'subjects', 'quizzes', 'reviews', 'analytics', 'automation'].includes(v)) {
+    if (v && ['dashboard', 'subjects', 'tutor', 'quizzes', 'reviews', 'analytics', 'automation'].includes(v)) {
       return v;
     }
     return 'dashboard';
@@ -121,11 +123,12 @@ export function App() {
   };
 
   const navItems: Array<{ id: NavView; label: string; icon: typeof LayoutDashboard; badge?: number }> = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'subjects', label: 'Subjects', icon: BookOpen },
+    { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
+    { id: 'subjects', label: 'Matérias', icon: BookOpen },
+    { id: 'tutor', label: 'Tutor IA', icon: Bot },
     { id: 'quizzes', label: 'Quizzes', icon: Zap },
-    { id: 'reviews', label: 'SR Queue', icon: Layers, badge: analytics?.totals.due_cards || 0 },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'reviews', label: 'Revisões', icon: Layers, badge: analytics?.totals.due_cards || 0 },
+    { id: 'analytics', label: 'Métricas', icon: BarChart3 },
     { id: 'automation', label: 'Webhooks', icon: Webhook },
   ];
 
@@ -300,6 +303,8 @@ export function App() {
               onRefreshSubjects={refreshAll}
             />
           )}
+
+          {view === 'tutor' && <AiTutorChat subjects={subjects} />}
 
           {view === 'quizzes' && (
             <ActiveRecallQuiz

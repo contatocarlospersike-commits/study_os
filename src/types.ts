@@ -1,4 +1,42 @@
-export type NavView = 'dashboard' | 'subjects' | 'quizzes' | 'reviews' | 'analytics' | 'automation';
+export type NavView = 'dashboard' | 'subjects' | 'tutor' | 'quizzes' | 'reviews' | 'analytics' | 'automation';
+
+export interface Material {
+  id: string;
+  subject_id: string | null;
+  subject_name?: string;
+  title: string;
+  file_type: string;
+  page_count: number;
+  chunk_count: number;
+  status: string;
+  created_at: string;
+}
+
+export interface RagCitation {
+  materialTitle: string;
+  pageNumber: number;
+  quote: string;
+}
+
+export interface ChatThread {
+  id: string;
+  subject_id: string | null;
+  subject_name?: string;
+  title: string;
+  updated_at: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  citations: RagCitation[];
+  mermaid_diagram: string;
+  grounding_status: 'grounded' | 'partial' | 'not_in_materials';
+  verified_by_critic: boolean;
+  follow_up_questions: string[];
+  created_at: string;
+}
 
 export interface Subject {
   id: string;
