@@ -12,6 +12,8 @@ import type {
   GraphData,
   LearningProfile,
   Material,
+  NoteDetail,
+  NoteItem,
   NotificationLog,
   OpenCatalogItem,
   ProfessorEvaluation,
@@ -56,14 +58,48 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   getSubjects: () => request<Subject[]>('/api/subjects'),
   getSubject: (id: string) => request<SubjectDetail>(`/api/subjects/${id}`),
-  createSubject: (body: { name: string; color: string; description: string }) =>
-    request<Subject>('/api/subjects', { method: 'POST', body: JSON.stringify(body) }),
+  createSubject: (body: {
+    name: string;
+    color: string;
+    description: string;
+    icon?: string;
+    cover_style?: string;
+    kind?: 'subject' | 'project';
+  }) => request<Subject>('/api/subjects', { method: 'POST', body: JSON.stringify(body) }),
   updateSubject: (
     id: string,
-    body: Partial<Pick<Subject, 'name' | 'color' | 'description' | 'notes_markdown' | 'transcript_markdown'>>
+    body: Partial<
+      Pick<Subject, 'name' | 'color' | 'description' | 'notes_markdown' | 'transcript_markdown' | 'icon' | 'cover_style' | 'kind'>
+    >
   ) => request<Subject>(`/api/subjects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteSubject: (id: string) =>
     request<{ ok: boolean }>(`/api/subjects/${id}`, { method: 'DELETE' }),
+
+  getNotes: (subjectId?: string) => {
+    const params = new URLSearchParams();
+    if (subjectId) params.set('subjectId', subjectId);
+    const qs = params.toString();
+    return request<NoteItem[]>(`/api/notes${qs ? `?${qs}` : ''}`);
+  },
+  getNote: (id: string) => request<NoteDetail>(`/api/notes/${id}`),
+  createNote: (body: {
+    subject_id: string;
+    parent_id?: string | null;
+    title: string;
+    icon?: string;
+    cover_style?: string;
+    page_type?: 'note' | 'folder' | 'project';
+    status?: string;
+    content_markdown?: string;
+  }) => request<NoteItem>('/api/notes', { method: 'POST', body: JSON.stringify(body) }),
+  updateNote: (
+    id: string,
+    body: Partial<
+      Pick<NoteItem, 'title' | 'icon' | 'cover_style' | 'page_type' | 'status' | 'content_markdown' | 'parent_id'>
+    >
+  ) => request<NoteItem>(`/api/notes/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteNote: (id: string) =>
+    request<{ ok: boolean }>(`/api/notes/${id}`, { method: 'DELETE' }),
   createConcept: (
     subjectId: string,
     body: { subtopic: string; title: string; summary: string; feynman_explanation: string }

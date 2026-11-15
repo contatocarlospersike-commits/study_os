@@ -1,118 +1,178 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
+  ArrowUpRight,
+  Bold,
+  BookOpen,
+  Check,
+  CheckSquare,
+  ChevronDown,
+  ChevronRight,
+  Edit3,
   Eye,
   FileText,
-  FileUp,
-  GitBranch,
-  Lightbulb,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Heading2,
   Link2,
+  List,
   Loader2,
-  Pencil,
+  Network,
+  Palette,
   Plus,
-  Save,
+  Quote,
+  Search,
   Sparkles,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import { api } from '../api/client';
-import type { GraphData, Material, Subject, SubjectDetail } from '../types';
+import type {
+  GraphData,
+  Material,
+  NavView,
+  NoteDetail,
+  NoteItem,
+  Subject,
+  SubjectDetail,
+} from '../types';
 
 interface SubjectHubProps {
-  subjects: Subject[];
-  initialSubjectId?: string;
-  onRefreshSubjects: () => Promise<void>;
+  onNavigate: (view: NavView) => void;
+  onStartStudy?: (subjectId: string) => void;
 }
 
-function RichNotesRenderer({
-  markdown,
-  subjects,
-  onOpenSubject,
-}: {
-  markdown: string;
-  subjects: Subject[];
-  onOpenSubject: (id: string) => void;
-}) {
-  if (!markdown.trim()) {
-    return (
-      <div className="py-10 text-center text-sm text-zinc-500">
-        Nenhuma nota escrita ainda. Clique em <strong>Editar</strong> para começar suas anotações.
-      </div>
-    );
-  }
+const COVER_PRESETS: Array<{ id: string; label: string; gradient: string }> = [
+  { id: 'aurora', label: 'Aurora', gradient: 'from-indigo-600/80 via-violet-600/70 to-fuchsia-600/70' },
+  { id: 'ocean', label: 'Oceano', gradient: 'from-cyan-600/80 via-sky-600/70 to-blue-700/80' },
+  { id: 'emerald', label: 'Esmeralda', gradient: 'from-emerald-600/80 via-teal-600/70 to-cyan-700/80' },
+  { id: 'sunset', label: 'Crepúsculo', gradient: 'from-amber-500/80 via-orange-600/75 to-rose-600/80' },
+  { id: 'slate', label: 'Minimal', gradient: 'from-zinc-700/90 via-zinc-800/90 to-zinc-900' },
+  { id: 'crimson', label: 'Rubi', gradient: 'from-rose-600/80 via-pink-600/70 to-purple-700/80' },
+];
 
-  const renderInline = (line: string) => {
-    const parts = line.split(/(\[\[[^\]]+\]\]|\*\*[^*]+\*\*)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith('[[') && part.endsWith(']]')) {
-        const label = part.slice(2, -2).trim();
-        const match = subjects.find((s) => s.name.toLowerCase() === label.toLowerCase());
+const ICON_PRESETS = ['📚', '🧠', '💻', '⚗️', '📐', '⚖️', '🧬', '🚀', '📝', '🎯', '🗂️', '⚡', '🌱', '🔬'];
+
+const COLOR_PRESETS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6'];
+
+function getCoverGradient(coverStyle?: string) {
+  return COVER_PRESETS.find((c) => c.id === coverStyle)?.gradient || COVER_PRESETS[0].gradient;
+}
+
+function RichMarkdown({
+  content,
+  onSelectLink,
+}: {
+  content: string;
+  onSelectLink: (label: string) => void;
+}) {
+  const lines = content.split('\n');
+
+  const renderInline = (text: string) => {
+    const tokens = text.split(/(\[\[[^\]]+\]\]|\*\*[^*]+\*\*|`[^`]+`)/g);
+    return tokens.map((tok, i) => {
+      if (tok.startsWith('[[') && tok.endsWith(']]')) {
+        const label = tok.slice(2, -2).trim();
         return (
           <button
             key={i}
             type="button"
-            onClick={() => match && onOpenSubject(match.id)}
-            className={`mx-0.5 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${
-              match
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 cursor-pointer'
-                : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
-            }`}
+            onClick={() => onSelectLink(label)}
+            className="mx-0.5 inline-flex items-center gap-1 rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[13px] font-medium text-indigo-300 ring-1 ring-indigo-500/30 transition hover:bg-indigo-500/25"
           >
             <Link2 className="h-3 w-3" />
             {label}
           </button>
         );
       }
-      if (part.startsWith('**') && part.endsWith('**')) {
+      if (tok.startsWith('**') && tok.endsWith('**')) {
         return (
-          <strong key={i} className="font-semibold text-zinc-50">
-            {part.slice(2, -2)}
+          <strong key={i} className="font-semibold text-zinc-100">
+            {tok.slice(2, -2)}
           </strong>
         );
       }
-      return <span key={i}>{part}</span>;
+      if (tok.startsWith('`') && tok.endsWith('`')) {
+        return (
+          <code key={i} className="rounded bg-zinc-800/90 px-1.5 py-0.5 font-mono text-xs text-amber-300">
+            {tok.slice(1, -1)}
+          </code>
+        );
+      }
+      return <span key={i}>{tok}</span>;
     });
   };
 
+  if (!content.trim()) {
+    return (
+      <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-10 text-center text-sm text-zinc-500">
+        Esta página ainda está em branco. Clique em <strong className="text-zinc-300">Editar</strong> para começar a escrever ou use{' '}
+        <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-indigo-300">[[Nome da Nota]]</code> para conectar ideias.
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-2.5 text-sm leading-relaxed text-zinc-200">
-      {markdown.split('\n').map((raw, idx) => {
-        const line = raw.trimEnd();
-        if (!line.trim()) return <div key={idx} className="h-1.5" />;
-        if (line.startsWith('### ')) {
+    <div className="space-y-2.5 text-[15px] leading-relaxed text-zinc-300">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={idx} className="h-1.5" />;
+        if (trimmed.startsWith('### ')) {
           return (
-            <h4 key={idx} className="pt-2 text-sm font-semibold text-cyan-300">
-              {renderInline(line.slice(4))}
-            </h4>
-          );
-        }
-        if (line.startsWith('## ')) {
-          return (
-            <h3 key={idx} className="pt-3 text-base font-semibold text-zinc-100 border-b border-zinc-800/80 pb-1">
-              {renderInline(line.slice(3))}
+            <h3 key={idx} className="pt-3 text-base font-semibold text-zinc-100">
+              {renderInline(trimmed.slice(4))}
             </h3>
           );
         }
-        if (line.startsWith('# ')) {
+        if (trimmed.startsWith('## ')) {
           return (
-            <h2 key={idx} className="pt-1 text-lg font-bold text-zinc-50">
-              {renderInline(line.slice(2))}
+            <h2 key={idx} className="border-b border-zinc-800/70 pb-1.5 pt-4 text-lg font-semibold text-zinc-50">
+              {renderInline(trimmed.slice(3))}
             </h2>
           );
         }
-        if (/^\s*[-*]\s+/.test(line)) {
+        if (trimmed.startsWith('# ')) {
           return (
-            <div key={idx} className="flex items-start gap-2 pl-2">
-              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-400" />
-              <div>{renderInline(line.replace(/^\s*[-*]\s+/, ''))}</div>
+            <h1 key={idx} className="pt-3 text-xl font-bold text-white">
+              {renderInline(trimmed.slice(2))}
+            </h1>
+          );
+        }
+        if (trimmed.startsWith('> ')) {
+          return (
+            <blockquote
+              key={idx}
+              className="rounded-r-lg border-l-2 border-indigo-500/70 bg-zinc-900/60 px-4 py-2 text-sm italic text-zinc-300"
+            >
+              {renderInline(trimmed.slice(2))}
+            </blockquote>
+          );
+        }
+        if (trimmed.startsWith('- [x] ') || trimmed.startsWith('- [X] ')) {
+          return (
+            <div key={idx} className="flex items-start gap-2.5 pl-1 text-zinc-400 line-through">
+              <span className="mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border border-emerald-500/50 bg-emerald-500/20 text-emerald-300">
+                <Check className="h-3 w-3" />
+              </span>
+              <span>{renderInline(trimmed.slice(6))}</span>
             </div>
           );
         }
-        if (/^\s*\d+\.\s+/.test(line)) {
-          const num = line.match(/^\s*(\d+)\./)?.[1];
+        if (trimmed.startsWith('- [ ] ')) {
           return (
-            <div key={idx} className="flex items-start gap-2 pl-1">
-              <span className="font-semibold text-cyan-400 text-xs mt-0.5">{num}.</span>
-              <div>{renderInline(line.replace(/^\s*\d+\.\s+/, ''))}</div>
+            <div key={idx} className="flex items-start gap-2.5 pl-1">
+              <span className="mt-1 inline-flex h-4 w-4 shrink-0 rounded border border-zinc-600 bg-zinc-900" />
+              <span>{renderInline(trimmed.slice(6))}</span>
+            </div>
+          );
+        }
+        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          return (
+            <div key={idx} className="flex items-start gap-2.5 pl-2">
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
+              <span>{renderInline(trimmed.slice(2))}</span>
             </div>
           );
         }
@@ -122,422 +182,894 @@ function RichNotesRenderer({
   );
 }
 
-export function SubjectHub({ subjects, initialSubjectId, onRefreshSubjects }: SubjectHubProps) {
-  const [selectedId, setSelectedId] = useState<string>(initialSubjectId || subjects[0]?.id || '');
-  const [detail, setDetail] = useState<SubjectDetail | null>(null);
+export function SubjectHub({ onNavigate }: SubjectHubProps) {
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [allNotes, setAllNotes] = useState<NoteItem[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState<SubjectDetail | null>(null);
+  const [activeNote, setActiveNote] = useState<NoteDetail | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [notesDraft, setNotesDraft] = useState('');
-  const [notesMode, setNotesMode] = useState<'preview' | 'edit'>('preview');
-  const [transcriptDraft, setTranscriptDraft] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [savedToast, setSavedToast] = useState(false);
-  const [mobileTab, setMobileTab] = useState<'notes' | 'materials' | 'concepts'>('notes');
 
-  // Direct Material Upload inside Subject
+  const [viewMode, setViewMode] = useState<'gallery' | 'workspace'>('gallery');
+  const [kindFilter, setKindFilter] = useState<'all' | 'subject' | 'project'>('all');
+  const [treeSearch, setTreeSearch] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+
+  // Editor state
+  const [editorMode, setEditorMode] = useState<'read' | 'edit'>('read');
+  const [noteTitleDraft, setNoteTitleDraft] = useState('');
+  const [noteContentDraft, setNoteContentDraft] = useState('');
+  const [noteStatusDraft, setNoteStatusDraft] = useState('active');
+  const [savingNote, setSavingNote] = useState(false);
+  const [savedNotice, setSavedNotice] = useState(false);
+  const [wikiQuery, setWikiQuery] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Create Space Modal
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newKind, setNewKind] = useState<'subject' | 'project'>('subject');
+  const [newIcon, setNewIcon] = useState('📚');
+  const [newCover, setNewCover] = useState('aurora');
+  const [newColor, setNewColor] = useState('#6366f1');
+  const [creatingSpace, setCreatingSpace] = useState(false);
+
+  // Customize Subject Cover Modal
+  const [showCoverPicker, setShowCoverPicker] = useState(false);
+
+  // New Note / Folder inline prompt
+  const [creatingNoteType, setCreatingNoteType] = useState<'note' | 'folder' | null>(null);
+  const [newNoteTitle, setNewNoteTitle] = useState('');
+  const [newNoteParentId, setNewNoteParentId] = useState<string | null>(null);
+
+  // Material Upload inside Workspace
+  const [showMaterialPanel, setShowMaterialPanel] = useState(false);
   const [matTitle, setMatTitle] = useState('');
   const [matText, setMatText] = useState('');
-  const [matPdfBase64, setMatPdfBase64] = useState<string | undefined>();
-  const [matFileName, setMatFileName] = useState('');
-  const [matAutoGenerate, setMatAutoGenerate] = useState(false);
   const [uploadingMat, setUploadingMat] = useState(false);
-  const [matFeedback, setMatFeedback] = useState('');
 
-  // Obsidian [[wikilink]] autocomplete & AI suggestions
-  const [wikiQuery, setWikiQuery] = useState<string | null>(null);
+  // AI Actions
   const [suggestingLinks, setSuggestingLinks] = useState(false);
-  const [linkSuggestions, setLinkSuggestions] = useState<
-    Array<{ label: string; reason: string; targetSubject: string }>
-  >([]);
+  const [suggestedLinks, setSuggestedLinks] = useState<Array<{ target: string; reason: string }>>([]);
+  const [triageLoading, setTriageLoading] = useState(false);
+  const [statusBanner, setStatusBanner] = useState('');
 
-  // Knowledge Graph Modal
+  // Knowledge Graph
   const [showGraph, setShowGraph] = useState(false);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
-  const [loadingGraph, setLoadingGraph] = useState(false);
 
-  // Create Subject state
-  const [showNewSubject, setShowNewSubject] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newDesc, setNewDesc] = useState('');
-  const [newColor, setNewColor] = useState('#22d3ee');
-
-  // Add Concept (Feynman breakdown) state
-  const [conceptSubtopic, setConceptSubtopic] = useState('');
-  const [conceptTitle, setConceptTitle] = useState('');
-  const [conceptSummary, setConceptSummary] = useState('');
-  const [conceptFeynman, setConceptFeynman] = useState('');
+  const loadSubjects = useCallback(async () => {
+    const [subs, notes] = await Promise.all([api.getSubjects(), api.getNotes()]);
+    setSubjects(subs);
+    setAllNotes(notes);
+  }, []);
 
   useEffect(() => {
-    if (initialSubjectId) setSelectedId(initialSubjectId);
-  }, [initialSubjectId]);
+    loadSubjects().catch(console.error);
+  }, [loadSubjects]);
 
-  useEffect(() => {
-    const target = selectedId && subjects.some((s) => s.id === selectedId) ? selectedId : subjects[0]?.id;
-    if (!target) {
-      setDetail(null);
-      setMaterials([]);
-      return;
-    }
-    if (target !== selectedId) setSelectedId(target);
-    setLinkSuggestions([]);
-    setMatFeedback('');
-    Promise.all([api.getSubject(target), api.getMaterials(target)]).then(([d, mats]) => {
-      setDetail(d);
-      setNotesDraft(d.notes_markdown);
-      setTranscriptDraft(d.transcript_markdown);
-      setNotesMode(d.notes_markdown.trim() ? 'preview' : 'edit');
+  const openNoteById = useCallback(async (noteId: string) => {
+    const detail = await api.getNote(noteId);
+    setActiveNote(detail);
+    setNoteTitleDraft(detail.title);
+    setNoteContentDraft(detail.content_markdown || '');
+    setNoteStatusDraft(detail.status || 'active');
+    setEditorMode(detail.content_markdown?.trim() ? 'read' : 'edit');
+    setSuggestedLinks([]);
+  }, []);
+
+  const openSubjectWorkspace = useCallback(
+    async (subjectId: string, preferredNoteId?: string) => {
+      const [detail, mats] = await Promise.all([api.getSubject(subjectId), api.getMaterials(subjectId)]);
+      setSelectedSubject(detail);
       setMaterials(mats);
-    });
-  }, [selectedId, subjects]);
+      setViewMode('workspace');
+      setShowCoverPicker(false);
+      setSuggestedLinks([]);
 
-  const handleNotesChange = (value: string) => {
-    setNotesDraft(value);
-    const match = value.match(/\[\[([^\[\]\n]*)$/);
+      const notes = detail.notes || [];
+      const folderMap: Record<string, boolean> = {};
+      notes.filter((n) => n.page_type === 'folder').forEach((f) => {
+        folderMap[f.id] = true;
+      });
+      setExpandedFolders((prev) => ({ ...folderMap, ...prev }));
+
+      const targetNote =
+        (preferredNoteId && notes.find((n) => n.id === preferredNoteId)) ||
+        notes.find((n) => n.page_type !== 'folder') ||
+        notes[0];
+      if (targetNote) {
+        await openNoteById(targetNote.id);
+      } else {
+        setActiveNote(null);
+      }
+    },
+    [openNoteById]
+  );
+
+  const handleSaveNote = useCallback(async () => {
+    if (!activeNote || savingNote) return;
+    setSavingNote(true);
+    try {
+      const updated = await api.updateNote(activeNote.id, {
+        title: noteTitleDraft.trim() || 'Sem título',
+        content_markdown: noteContentDraft,
+        status: noteStatusDraft,
+      });
+      const refreshed = await api.getNote(updated.id);
+      setActiveNote(refreshed);
+      if (selectedSubject) {
+        const detail = await api.getSubject(selectedSubject.id);
+        setSelectedSubject(detail);
+      }
+      await loadSubjects();
+      setSavedNotice(true);
+      setTimeout(() => setSavedNotice(false), 1800);
+    } finally {
+      setSavingNote(false);
+    }
+  }, [activeNote, savingNote, noteTitleDraft, noteContentDraft, noteStatusDraft, selectedSubject, loadSubjects]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && viewMode === 'workspace' && activeNote) {
+        e.preventDefault();
+        handleSaveNote();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [viewMode, activeNote, handleSaveNote]);
+
+  const handleCreateSpace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim() || creatingSpace) return;
+    setCreatingSpace(true);
+    try {
+      const created = await api.createSubject({
+        name: newName.trim(),
+        description: newDescription.trim(),
+        kind: newKind,
+        icon: newIcon,
+        cover_style: newCover,
+        color: newColor,
+      });
+      setNewName('');
+      setNewDescription('');
+      setShowNewModal(false);
+      await loadSubjects();
+      await openSubjectWorkspace(created.id);
+    } finally {
+      setCreatingSpace(false);
+    }
+  };
+
+  const handleDeleteSpace = async (id: string, name: string) => {
+    if (!confirm(`Excluir "${name}" e todas as suas notas e flashcards?`)) return;
+    await api.deleteSubject(id);
+    if (selectedSubject?.id === id) {
+      setSelectedSubject(null);
+      setActiveNote(null);
+      setViewMode('gallery');
+    }
+    await loadSubjects();
+  };
+
+  const handleCreateNoteOrFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSubject || !creatingNoteType || !newNoteTitle.trim()) return;
+    const created = await api.createNote({
+      subject_id: selectedSubject.id,
+      parent_id: newNoteParentId,
+      title: newNoteTitle.trim(),
+      icon: creatingNoteType === 'folder' ? '📁' : '📄',
+      page_type: creatingNoteType,
+      content_markdown: '',
+    });
+    setCreatingNoteType(null);
+    setNewNoteTitle('');
+    setNewNoteParentId(null);
+    const detail = await api.getSubject(selectedSubject.id);
+    setSelectedSubject(detail);
+    await loadSubjects();
+    if (created.page_type !== 'folder') {
+      await openNoteById(created.id);
+      setEditorMode('edit');
+    }
+  };
+
+  const handleDeleteNote = async (note: NoteItem) => {
+    if (!selectedSubject) return;
+    if (!confirm(`Excluir "${note.title}"?`)) return;
+    await api.deleteNote(note.id);
+    const detail = await api.getSubject(selectedSubject.id);
+    setSelectedSubject(detail);
+    await loadSubjects();
+    if (activeNote?.id === note.id) {
+      const next = (detail.notes || []).find((n) => n.page_type !== 'folder') || detail.notes?.[0];
+      if (next) await openNoteById(next.id);
+      else setActiveNote(null);
+    }
+  };
+
+  const handleUpdateSubjectAppearance = async (patch: Partial<Pick<Subject, 'icon' | 'cover_style' | 'kind' | 'color'>>) => {
+    if (!selectedSubject) return;
+    await api.updateSubject(selectedSubject.id, patch);
+    const detail = await api.getSubject(selectedSubject.id);
+    setSelectedSubject(detail);
+    await loadSubjects();
+  };
+
+  const handleEditorChange = (val: string) => {
+    setNoteContentDraft(val);
+    const el = textareaRef.current;
+    const cursor = el ? el.selectionStart : val.length;
+    const before = val.slice(0, cursor);
+    const match = before.match(/\[\[([^\]]*)$/);
     setWikiQuery(match ? match[1] : null);
   };
 
-  const wikiCandidates = useMemo(() => {
-    if (wikiQuery === null) return [];
-    const q = wikiQuery.toLowerCase();
-    return subjects.filter((s) => s.id !== detail?.id && s.name.toLowerCase().includes(q)).slice(0, 6);
-  }, [wikiQuery, subjects, detail?.id]);
-
   const insertWikiLink = (label: string) => {
-    const next = notesDraft.replace(/\[\[([^\[\]\n]*)$/, `[[${label}]]`);
-    setNotesDraft(next);
+    const el = textareaRef.current;
+    const cursor = el ? el.selectionStart : noteContentDraft.length;
+    const before = noteContentDraft.slice(0, cursor);
+    const after = noteContentDraft.slice(cursor);
+    const replaced = before.replace(/\[\[([^\]]*)$/, `[[${label}]]`);
+    const next = replaced.endsWith(`[[${label}]]`) ? `${replaced}${after}` : `${before} [[${label}]]${after}`;
+    setNoteContentDraft(next);
     setWikiQuery(null);
+    setTimeout(() => el?.focus(), 0);
   };
 
-  const appendWikiChip = (label: string) => {
-    const spacer = notesDraft.endsWith('\n') || !notesDraft ? '' : '\n';
-    setNotesDraft(`${notesDraft}${spacer}Conectado com [[${label}]]`);
-    setNotesMode('edit');
-  };
-
-  const handleSaveNotes = async () => {
-    if (!detail) return;
-    setSaving(true);
-    try {
-      await api.updateSubject(detail.id, {
-        notes_markdown: notesDraft,
-        transcript_markdown: transcriptDraft,
-      });
-      const refreshed = await api.getSubject(detail.id);
-      setDetail(refreshed);
-      await onRefreshSubjects();
-      setSavedToast(true);
-      setNotesMode('preview');
-      setTimeout(() => setSavedToast(false), 2000);
-    } finally {
-      setSaving(false);
+  const insertSnippet = (prefix: string, suffix = '') => {
+    const el = textareaRef.current;
+    if (!el) {
+      setNoteContentDraft((p) => `${p}\n${prefix}${suffix}`);
+      return;
     }
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = noteContentDraft.slice(start, end);
+    const next =
+      noteContentDraft.slice(0, start) + prefix + selected + suffix + noteContentDraft.slice(end);
+    setNoteContentDraft(next);
+    setEditorMode('edit');
+    setTimeout(() => {
+      el.focus();
+      const pos = start + prefix.length + selected.length;
+      el.setSelectionRange(pos, pos);
+    }, 0);
   };
 
-  const handleDeleteSubject = async () => {
-    if (!detail) return;
-    if (!window.confirm(`Excluir a matéria "${detail.name}" e todas as suas notas/conceitos?`)) return;
-    await api.deleteSubject(detail.id);
-    setSelectedId('');
-    await onRefreshSubjects();
-  };
-
-  const handlePdfSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setMatFileName(file.name);
-    if (!matTitle) setMatTitle(file.name.replace(/\.pdf$/i, ''));
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      const base64 = result.includes(',') ? result.split(',')[1] : result;
-      setMatPdfBase64(base64);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleUploadMaterial = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!detail || !matTitle.trim() || (!matText.trim() && !matPdfBase64)) return;
-    setUploadingMat(true);
-    setMatFeedback('');
-    try {
-      if (matAutoGenerate) {
-        const res = await api.triageInbox({
-          title: matTitle.trim(),
-          subject_id: detail.id,
-          file_type: matPdfBase64 ? 'pdf' : 'text',
-          content_base64: matPdfBase64,
-          text_content: matText.trim() || undefined,
-        });
-        setMatFeedback(
-          `Indexado no Tutor IA + ${res.createdConcepts} conceitos e ${res.createdFlashcards} flashcards gerados!`
-        );
+  const handleLinkClick = async (label: string) => {
+    const norm = label.toLowerCase().trim();
+    const matchedNote = allNotes.find((n) => n.title.toLowerCase().trim() === norm);
+    if (matchedNote) {
+      if (selectedSubject?.id === matchedNote.subject_id) {
+        await openNoteById(matchedNote.id);
       } else {
-        await api.ingestMaterial({
-          title: matTitle.trim(),
-          subject_id: detail.id,
-          file_type: matPdfBase64 ? 'pdf' : 'text',
-          content_base64: matPdfBase64,
-          text_content: matText.trim() || undefined,
-        });
-        setMatFeedback('Material indexado no Tutor IA com sucesso!');
+        await openSubjectWorkspace(matchedNote.subject_id, matchedNote.id);
       }
-      setMatTitle('');
-      setMatText('');
-      setMatPdfBase64(undefined);
-      setMatFileName('');
-      const [refreshed, mats] = await Promise.all([api.getSubject(detail.id), api.getMaterials(detail.id)]);
-      setDetail(refreshed);
-      setMaterials(mats);
-      await onRefreshSubjects();
-    } catch (err) {
-      setMatFeedback(`Erro: ${(err as Error).message}`);
-    } finally {
-      setUploadingMat(false);
+      return;
     }
-  };
-
-  const handleDeleteMaterial = async (matId: string) => {
-    if (!detail) return;
-    await api.deleteMaterial(matId);
-    const mats = await api.getMaterials(detail.id);
-    setMaterials(mats);
+    const matchedSubject = subjects.find((s) => s.name.toLowerCase().trim() === norm);
+    if (matchedSubject) {
+      await openSubjectWorkspace(matchedSubject.id);
+    }
   };
 
   const handleSuggestLinks = async () => {
-    if (!detail) return;
+    if (!selectedSubject) return;
     setSuggestingLinks(true);
     try {
-      const res = await api.suggestNoteLinks(detail.id);
-      setLinkSuggestions(res.suggestions);
-    } catch {
-      setLinkSuggestions([]);
+      const res = await api.suggestNoteLinks(selectedSubject.id);
+      setSuggestedLinks(
+        (res.suggestions || []).map((s) => ({
+          target: s.label || s.targetSubject,
+          reason: s.reason,
+        }))
+      );
     } finally {
       setSuggestingLinks(false);
     }
   };
 
-  const handleOpenGraph = async () => {
-    setShowGraph(true);
-    setLoadingGraph(true);
+  const handleGenerateFlashcardsFromNote = async () => {
+    if (!selectedSubject || !activeNote || !noteContentDraft.trim()) return;
+    setTriageLoading(true);
+    setStatusBanner('');
     try {
-      const g = await api.getGraph();
-      setGraphData(g);
+      const res = await api.triageInbox({
+        subject_id: selectedSubject.id,
+        title: activeNote.title,
+        file_type: 'text',
+        text_content: noteContentDraft,
+      });
+      setStatusBanner(
+        `Criados ${res.createdFlashcards} flashcards e ${res.createdConcepts} conceitos a partir desta nota.`
+      );
+      await loadSubjects();
+    } catch (err) {
+      setStatusBanner(err instanceof Error ? err.message : 'Falha ao gerar flashcards');
     } finally {
-      setLoadingGraph(false);
+      setTriageLoading(false);
     }
   };
 
-  const handleCreateSubject = async (e: React.FormEvent) => {
+  const handleUploadTextMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim()) return;
-    const created = await api.createSubject({
-      name: newName.trim(),
-      description: newDesc.trim(),
-      color: newColor,
-    });
-    setNewName('');
-    setNewDesc('');
-    setShowNewSubject(false);
-    await onRefreshSubjects();
-    setSelectedId(created.id);
+    if (!selectedSubject || !matTitle.trim() || !matText.trim()) return;
+    setUploadingMat(true);
+    try {
+      await api.ingestMaterial({
+        subject_id: selectedSubject.id,
+        title: matTitle.trim(),
+        file_type: 'text',
+        text_content: matText.trim(),
+      });
+      setMatTitle('');
+      setMatText('');
+      setShowMaterialPanel(false);
+      const mats = await api.getMaterials(selectedSubject.id);
+      setMaterials(mats);
+      setStatusBanner('Material indexado no RAG e pronto para o Tutor IA.');
+    } finally {
+      setUploadingMat(false);
+    }
   };
 
-  const handleAddConcept = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!detail || !conceptTitle.trim() || !conceptSummary.trim()) return;
-    await api.createConcept(detail.id, {
-      subtopic: conceptSubtopic.trim() || 'Geral',
-      title: conceptTitle.trim(),
-      summary: conceptSummary.trim(),
-      feynman_explanation: conceptFeynman.trim(),
-    });
-    setConceptSubtopic('');
-    setConceptTitle('');
-    setConceptSummary('');
-    setConceptFeynman('');
-    const refreshed = await api.getSubject(detail.id);
-    setDetail(refreshed);
-    await onRefreshSubjects();
+  const handlePdfUpload = async (file: File) => {
+    if (!selectedSubject) return;
+    setUploadingMat(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          const comma = result.indexOf(',');
+          resolve(comma >= 0 ? result.slice(comma + 1) : result);
+        };
+        reader.onerror = () => reject(new Error('Falha ao ler PDF'));
+        reader.readAsDataURL(file);
+      });
+      await api.ingestMaterial({
+        subject_id: selectedSubject.id,
+        title: file.name.replace(/\.pdf$/i, ''),
+        file_type: 'pdf',
+        content_base64: base64,
+      });
+      const mats = await api.getMaterials(selectedSubject.id);
+      setMaterials(mats);
+      setStatusBanner(`PDF "${file.name}" indexado com sucesso.`);
+    } finally {
+      setUploadingMat(false);
+    }
   };
 
-  // Circular layout for SVG Knowledge Graph
-  const graphNodes = useMemo(() => {
-    if (!graphData) return [];
-    const count = Math.max(1, graphData.subjects.length);
-    const cx = 280;
-    const cy = 175;
-    const r = count === 1 ? 0 : 120;
-    return graphData.subjects.map((s, idx) => {
-      const angle = (idx / count) * Math.PI * 2 - Math.PI / 2;
-      return {
-        ...s,
-        x: cx + Math.cos(angle) * r,
-        y: cy + Math.sin(angle) * r,
-      };
+  const openGraphModal = async () => {
+    const data = await api.getGraph();
+    setGraphData(data);
+    setShowGraph(true);
+  };
+
+  const filteredSubjects = useMemo(() => {
+    if (kindFilter === 'all') return subjects;
+    return subjects.filter((s) => (s.kind || 'subject') === kindFilter);
+  }, [subjects, kindFilter]);
+
+  const wikiSuggestions = useMemo(() => {
+    if (wikiQuery === null) return [];
+    const q = wikiQuery.toLowerCase();
+    const noteChoices = allNotes
+      .filter((n) => n.id !== activeNote?.id && n.page_type !== 'folder')
+      .map((n) => ({ label: n.title, sub: subjects.find((s) => s.id === n.subject_id)?.name || 'Nota', icon: n.icon || '📄' }));
+    const subjectChoices = subjects.map((s) => ({
+      label: s.name,
+      sub: s.kind === 'project' ? 'Projeto' : 'Matéria',
+      icon: s.icon || '📚',
+    }));
+    const combined = [...noteChoices, ...subjectChoices];
+    const seen = new Set<string>();
+    return combined
+      .filter((item) => {
+        const key = item.label.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return !q || key.includes(q);
+      })
+      .slice(0, 7);
+  }, [wikiQuery, allNotes, subjects, activeNote]);
+
+  // Tree rendering helper
+  const renderTree = (parentId: string | null, depth = 0) => {
+    const notes = selectedSubject?.notes || [];
+    const children = notes.filter((n) => {
+      const matchesParent = (n.parent_id || null) === parentId;
+      const matchesSearch = !treeSearch.trim() || n.title.toLowerCase().includes(treeSearch.toLowerCase());
+      return treeSearch.trim() ? parentId === null && matchesSearch : matchesParent;
     });
-  }, [graphData]);
+
+    return children.map((node) => {
+      const isFolder = node.page_type === 'folder';
+      const isExpanded = !!expandedFolders[node.id];
+      const isActive = activeNote?.id === node.id;
+
+      return (
+        <div key={node.id}>
+          <div
+            style={{ paddingLeft: `${8 + depth * 14}px` }}
+            className={`group flex items-center justify-between rounded-lg pr-1.5 py-1.5 text-[13px] transition ${
+              isActive
+                ? 'bg-indigo-500/15 text-indigo-200 font-medium'
+                : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                if (isFolder) {
+                  setExpandedFolders((p) => ({ ...p, [node.id]: !p[node.id] }));
+                } else {
+                  openNoteById(node.id);
+                }
+              }}
+              className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+            >
+              {isFolder ? (
+                <span className="text-zinc-500">
+                  {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                </span>
+              ) : (
+                <span className="w-3.5" />
+              )}
+              <span className="shrink-0 text-sm">
+                {isFolder ? (
+                  isExpanded ? (
+                    <FolderOpen className="h-3.5 w-3.5 text-amber-400/90" />
+                  ) : (
+                    <Folder className="h-3.5 w-3.5 text-amber-400/80" />
+                  )
+                ) : (
+                  node.icon || '📄'
+                )}
+              </span>
+              <span className="truncate">{node.title}</span>
+            </button>
+            <div className="hidden items-center gap-0.5 group-hover:flex">
+              {isFolder && (
+                <button
+                  type="button"
+                  title="Nova nota nesta pasta"
+                  onClick={() => {
+                    setNewNoteParentId(node.id);
+                    setCreatingNoteType('note');
+                    setExpandedFolders((p) => ({ ...p, [node.id]: true }));
+                  }}
+                  className="rounded p-1 text-zinc-500 hover:bg-zinc-700/70 hover:text-zinc-200"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              )}
+              <button
+                type="button"
+                title="Excluir"
+                onClick={() => handleDeleteNote(node)}
+                className="rounded p-1 text-zinc-500 hover:bg-rose-500/20 hover:text-rose-300"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+          {isFolder && isExpanded && !treeSearch.trim() && renderTree(node.id, depth + 1)}
+        </div>
+      );
+    });
+  };
 
   return (
     <div className="space-y-5">
+      {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400">
-            Arquitetura de Conhecimento
+          <h1 className="text-2xl font-bold tracking-tight text-white">Workspace & Conhecimento</h1>
+          <p className="text-sm text-zinc-400">
+            Organize matérias, projetos com capas Notion, pastas, notas conectadas e materiais PDF.
           </p>
-          <h1 className="heading-fluid font-bold text-zinc-50">Matérias, Materiais & Notas</h1>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex flex-wrap items-center gap-2">
+          {viewMode === 'workspace' && (
+            <button
+              type="button"
+              onClick={() => setViewMode('gallery')}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs font-medium text-zinc-300 transition hover:border-zinc-700 hover:text-white"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Galeria de Espaços
+            </button>
+          )}
           <button
             type="button"
-            onClick={handleOpenGraph}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-zinc-200 hover:border-cyan-500/40 hover:text-cyan-300"
+            onClick={openGraphModal}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-indigo-500/50 hover:text-indigo-300"
           >
-            <GitBranch className="h-4 w-4 text-cyan-400" />
+            <Network className="h-3.5 w-3.5 text-indigo-400" />
             Mapa de Conexões
           </button>
           <button
             type="button"
-            onClick={() => setShowNewSubject((v) => !v)}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-white"
+            onClick={() => setShowNewModal(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-500"
           >
-            <Plus className="h-4 w-4" />
-            Nova Matéria
+            <Plus className="h-3.5 w-3.5" />
+            Novo Espaço
           </button>
         </div>
       </div>
 
-      {showNewSubject && (
-        <form
-          onSubmit={handleCreateSubject}
-          className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:grid-cols-4"
-        >
-          <input
-            type="text"
-            required
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Nome da Matéria (ex: Álgebra Linear)"
-            className="min-h-[44px] rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
-          />
-          <input
-            type="text"
-            value={newDesc}
-            onChange={(e) => setNewDesc(e.target.value)}
-            placeholder="Descrição curta"
-            className="min-h-[44px] rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 sm:col-span-2"
-          />
-          <div className="flex items-center gap-2">
-            <input
-              type="color"
-              aria-label="Cor da matéria"
-              value={newColor}
-              onChange={(e) => setNewColor(e.target.value)}
-              className="h-11 w-12 cursor-pointer rounded-lg border border-zinc-700 bg-zinc-950 p-1"
-            />
-            <button
-              type="submit"
-              className="min-h-[44px] flex-1 rounded-xl bg-cyan-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-cyan-400"
-            >
-              Criar
-            </button>
-          </div>
-        </form>
-      )}
-
-      {subjects.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 p-10 text-center space-y-3">
-          <p className="text-base font-semibold text-zinc-100">Você ainda não tem matérias cadastradas.</p>
-          <p className="text-sm text-zinc-400">
-            Crie sua primeira matéria da faculdade acima para subir PDFs, fazer anotações e usar o Tutor IA.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowNewSubject(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-400"
-          >
-            <Plus className="h-4 w-4" />
-            Criar Primeira Matéria
+      {statusBanner && (
+        <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-xs text-emerald-200">
+          <span>{statusBanner}</span>
+          <button type="button" onClick={() => setStatusBanner('')} className="text-emerald-300 hover:text-white">
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
-      ) : (
-        <>
-          {/* Horizontal swipeable subject selector */}
-          <div className="swipe-deck" role="region" aria-label="Matérias">
-            {subjects.map((s) => {
-              const active = s.id === (detail?.id || selectedId);
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setSelectedId(s.id)}
-                  className={`flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium ${
-                    active
-                      ? 'border-cyan-400 bg-cyan-950/40 text-cyan-200'
-                      : 'border-zinc-800 bg-zinc-900/70 text-zinc-300 hover:border-zinc-700'
-                  }`}
-                >
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: s.color }} />
-                  {s.name}
-                </button>
-              );
-            })}
-          </div>
+      )}
 
-          {/* Mobile View Switcher */}
-          <div className="flex gap-2 lg:hidden">
+      {/* GALLERY VIEW (Notion Covers) */}
+      {viewMode === 'gallery' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
             {(
               [
-                { id: 'notes', label: 'Notas' },
-                { id: 'materials', label: 'Materiais/PDF' },
-                { id: 'concepts', label: 'Conceitos' },
+                ['all', 'Todos'],
+                ['subject', 'Matérias'],
+                ['project', 'Projetos'],
               ] as const
-            ).map((tab) => (
+            ).map(([key, label]) => (
               <button
-                key={tab.id}
+                key={key}
                 type="button"
-                onClick={() => setMobileTab(tab.id)}
-                className={`min-h-[40px] flex-1 rounded-xl px-3 text-xs font-semibold ${
-                  mobileTab === tab.id
-                    ? 'bg-cyan-500 text-zinc-950'
-                    : 'border border-zinc-800 bg-zinc-900 text-zinc-300'
+                onClick={() => setKindFilter(key)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  kindFilter === key
+                    ? 'bg-zinc-800 text-white'
+                    : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
                 }`}
               >
-                {tab.label}
+                {label}
               </button>
             ))}
           </div>
 
-          {detail && (
-            <div className="grid gap-5 lg:grid-cols-12">
-              {/* Left Pane: Rich Obsidian Notes + Direct Materials Upload */}
-              <div className="space-y-4 lg:col-span-7">
-                {/* Clean Obsidian Notes Card */}
+          {filteredSubjects.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-10 text-center">
+              <p className="text-base font-medium text-zinc-200">Seu Workspace está limpo</p>
+              <p className="mt-1 text-sm text-zinc-400">
+                Crie sua primeira matéria ou projeto com capa personalizada para começar a organizar suas notas.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowNewModal(true)}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Criar primeiro espaço
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredSubjects.map((sub) => (
                 <div
-                  className={`rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 space-y-4 ${
-                    mobileTab === 'notes' ? 'block' : 'hidden lg:block'
-                  }`}
+                  key={sub.id}
+                  onClick={() => openSubjectWorkspace(sub.id)}
+                  className="group cursor-pointer overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/60 transition hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900/90"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="h-3 w-3 rounded-full" style={{ backgroundColor: detail.color }} />
-                      <h2 className="text-base font-semibold text-zinc-100">{detail.name}</h2>
+                  {/* Notion Cover */}
+                  <div className={`relative h-24 w-full bg-gradient-to-r ${getCoverGradient(sub.cover_style)}`}>
+                    <div className="absolute right-3 top-3 flex items-center gap-1.5">
+                      <span className="rounded-full bg-black/35 px-2.5 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                        {sub.kind === 'project' ? 'Projeto' : 'Matéria'}
+                      </span>
                       <button
                         type="button"
-                        onClick={handleDeleteSubject}
-                        title="Excluir matéria"
-                        className="rounded-lg p-1 text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteSpace(sub.id, sub.name);
+                        }}
+                        className="rounded-full bg-black/35 p-1.5 text-zinc-200 opacity-0 transition hover:bg-rose-600/80 group-hover:opacity-100"
+                        title="Excluir"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
+                    <div className="absolute -bottom-5 left-4 flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-xl shadow-md">
+                      {sub.icon || '📚'}
+                    </div>
+                  </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5">
+                  <div className="px-4 pb-4 pt-7">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="truncate text-base font-semibold text-white">{sub.name}</h3>
+                      <ArrowUpRight className="h-4 w-4 shrink-0 text-zinc-500 transition group-hover:text-indigo-400" />
+                    </div>
+                    <p className="mt-1 line-clamp-2 min-h-[32px] text-xs text-zinc-400">
+                      {sub.description || 'Clique para abrir notas, pastas e materiais.'}
+                    </p>
+                    <div className="mt-3 flex items-center gap-3 border-t border-zinc-800/70 pt-3 text-[11px] text-zinc-400">
+                      <span>{sub.note_count ?? 0} notas</span>
+                      <span>•</span>
+                      <span>{sub.card_count ?? 0} flashcards</span>
+                      {(sub.due_count ?? 0) > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-amber-300">{sub.due_count} pendentes</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* WORKSPACE VIEW (Notion Cover + Collapsible Tree + Markdown Note Canvas) */}
+      {viewMode === 'workspace' && selectedSubject && (
+        <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-950/80 shadow-xl">
+          {/* Subject Notion Cover Banner */}
+          <div className={`relative h-28 w-full bg-gradient-to-r ${getCoverGradient(selectedSubject.cover_style)}`}>
+            <div className="absolute right-4 top-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCoverPicker((v) => !v)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-black/40 px-2.5 py-1.5 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-black/60"
+              >
+                <Palette className="h-3.5 w-3.5" />
+                Personalizar Capa
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                className="rounded-lg bg-black/40 px-2.5 py-1.5 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-black/60"
+              >
+                {sidebarCollapsed ? 'Mostrar Árvore' : 'Foco Total'}
+              </button>
+            </div>
+
+            <div className="absolute bottom-3 left-5 flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-zinc-950/90 text-2xl shadow-lg">
+                {selectedSubject.icon || '📚'}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-white drop-shadow">{selectedSubject.name}</h2>
+                  <span className="rounded-full bg-black/35 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-100">
+                    {selectedSubject.kind === 'project' ? 'Projeto' : 'Matéria'}
+                  </span>
+                </div>
+                {selectedSubject.description && (
+                  <p className="text-xs text-zinc-100/85 drop-shadow-sm">{selectedSubject.description}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Inline Cover & Icon Customizer */}
+          {showCoverPicker && (
+            <div className="border-b border-zinc-800 bg-zinc-900/90 px-5 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium text-zinc-400">Capa:</span>
+                  {COVER_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handleUpdateSubjectAppearance({ cover_style: preset.id })}
+                      className={`h-6 w-12 rounded-md bg-gradient-to-r ${preset.gradient} ring-2 transition ${
+                        selectedSubject.cover_style === preset.id ? 'ring-white' : 'ring-transparent hover:ring-zinc-500'
+                      }`}
+                      title={preset.label}
+                    />
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-medium text-zinc-400">Ícone:</span>
+                  {ICON_PRESETS.slice(0, 10).map((ic) => (
+                    <button
+                      key={ic}
+                      type="button"
+                      onClick={() => handleUpdateSubjectAppearance({ icon: ic })}
+                      className={`rounded-md px-1.5 py-0.5 text-base hover:bg-zinc-800 ${
+                        selectedSubject.icon === ic ? 'bg-zinc-800 ring-1 ring-indigo-400' : ''
+                      }`}
+                    >
+                      {ic}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Split Body */}
+          <div className="flex min-h-[560px] flex-col md:flex-row">
+            {/* Left Sidebar Tree */}
+            {!sidebarCollapsed && (
+              <aside className="flex w-full shrink-0 flex-col border-b border-zinc-800/80 bg-zinc-900/40 md:w-72 md:border-b-0 md:border-r">
+                <div className="space-y-2.5 border-b border-zinc-800/80 p-3">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                    <input
+                      value={treeSearch}
+                      onChange={(e) => setTreeSearch(e.target.value)}
+                      placeholder="Filtrar notas..."
+                      className="w-full rounded-lg border border-zinc-800 bg-zinc-950/70 py-1.5 pl-8 pr-2.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewNoteParentId(null);
+                        setCreatingNoteType('note');
+                      }}
+                      className="inline-flex items-center justify-center gap-1 rounded-lg bg-zinc-800/80 px-2 py-1.5 text-xs font-medium text-zinc-200 transition hover:bg-zinc-800"
+                    >
+                      <Plus className="h-3.5 w-3.5 text-indigo-400" />
+                      Nova Nota
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewNoteParentId(null);
+                        setCreatingNoteType('folder');
+                      }}
+                      className="inline-flex items-center justify-center gap-1 rounded-lg bg-zinc-800/80 px-2 py-1.5 text-xs font-medium text-zinc-200 transition hover:bg-zinc-800"
+                    >
+                      <FolderPlus className="h-3.5 w-3.5 text-amber-400" />
+                      Nova Pasta
+                    </button>
+                  </div>
+
+                  {creatingNoteType && (
+                    <form onSubmit={handleCreateNoteOrFolder} className="space-y-1.5 rounded-lg border border-zinc-700 bg-zinc-950 p-2">
+                      <input
+                        autoFocus
+                        value={newNoteTitle}
+                        onChange={(e) => setNewNoteTitle(e.target.value)}
+                        placeholder={creatingNoteType === 'folder' ? 'Nome da pasta...' : 'Título da nota...'}
+                        className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                      />
+                      <div className="flex justify-end gap-1">
                         <button
                           type="button"
-                          onClick={() => setNotesMode('preview')}
-                          className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ${
-                            notesMode === 'preview' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400'
+                          onClick={() => {
+                            setCreatingNoteType(null);
+                            setNewNoteTitle('');
+                          }}
+                          className="rounded px-2 py-0.5 text-[11px] text-zinc-400 hover:text-white"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          className="rounded bg-indigo-600 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-indigo-500"
+                        >
+                          Criar
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+
+                {/* Pages Tree */}
+                <div className="flex-1 space-y-0.5 overflow-y-auto p-2">{renderTree(null, 0)}</div>
+
+                {/* Materials & PDFs section inside Workspace */}
+                <div className="border-t border-zinc-800/80 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                      Materiais ({materials.length})
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <label className="cursor-pointer rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white" title="Subir PDF">
+                        <Upload className="h-3.5 w-3.5" />
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handlePdfUpload(f);
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowMaterialPanel((v) => !v)}
+                        className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                        title="Colar texto"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {showMaterialPanel && (
+                    <form onSubmit={handleUploadTextMaterial} className="mt-2 space-y-1.5 rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+                      <input
+                        value={matTitle}
+                        onChange={(e) => setMatTitle(e.target.value)}
+                        placeholder="Título do material"
+                        className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-white"
+                      />
+                      <textarea
+                        rows={3}
+                        value={matText}
+                        onChange={(e) => setMatText(e.target.value)}
+                        placeholder="Cole o conteúdo ou resumo..."
+                        className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-white"
+                      />
+                      <button
+                        type="submit"
+                        disabled={uploadingMat}
+                        className="w-full rounded bg-indigo-600 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                      >
+                        {uploadingMat ? 'Indexando...' : 'Salvar Material'}
+                      </button>
+                    </form>
+                  )}
+
+                  <div className="mt-2 max-h-28 space-y-1 overflow-y-auto">
+                    {materials.map((m) => (
+                      <div key={m.id} className="flex items-center justify-between rounded bg-zinc-950/60 px-2 py-1 text-[11px] text-zinc-300">
+                        <span className="truncate">{m.title}</span>
+                        <span className="ml-2 shrink-0 text-[10px] text-zinc-500">{m.chunk_count}ch</span>
+                      </div>
+                    ))}
+                    {materials.length === 0 && (
+                      <p className="text-[11px] text-zinc-500">Suba PDFs ou textos para o Tutor IA.</p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('library')}
+                    className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-950/70 py-1.5 text-[11px] font-medium text-zinc-300 hover:border-indigo-500/40 hover:text-indigo-300"
+                  >
+                    <BookOpen className="h-3 w-3" />
+                    Sugerir Livros na Biblioteca
+                  </button>
+                </div>
+              </aside>
+            )}
+
+            {/* Main Note Canvas */}
+            <main className="flex flex-1 flex-col bg-zinc-950/50">
+              {activeNote ? (
+                <>
+                  {/* Note Toolbar */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={noteStatusDraft}
+                        onChange={(e) => setNoteStatusDraft(e.target.value)}
+                        className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 focus:outline-none"
+                      >
+                        <option value="active">Ativo</option>
+                        <option value="draft">Rascunho</option>
+                        <option value="done">Concluído</option>
+                      </select>
+
+                      <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setEditorMode('read')}
+                          className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                            editorMode === 'read' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'
                           }`}
                         >
                           <Eye className="h-3.5 w-3.5" />
@@ -545,402 +1077,500 @@ export function SubjectHub({ subjects, initialSubjectId, onRefreshSubjects }: Su
                         </button>
                         <button
                           type="button"
-                          onClick={() => setNotesMode('edit')}
-                          className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ${
-                            notesMode === 'edit' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400'
+                          onClick={() => setEditorMode('edit')}
+                          className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                            editorMode === 'edit' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'
                           }`}
                         >
-                          <Pencil className="h-3.5 w-3.5" />
+                          <Edit3 className="h-3.5 w-3.5" />
                           Editar
                         </button>
                       </div>
+                    </div>
 
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        disabled={suggestingLinks}
                         onClick={handleSuggestLinks}
-                        className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 text-xs font-medium text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-50"
+                        disabled={suggestingLinks}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-indigo-300 transition hover:border-indigo-500/40 disabled:opacity-50"
                       >
-                        {suggestingLinks ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-3.5 w-3.5" />
-                        )}
-                        Conectar (IA)
+                        {suggestingLinks ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        Sugerir Conexões
                       </button>
-
                       <button
                         type="button"
-                        disabled={saving}
-                        onClick={handleSaveNotes}
-                        className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg bg-cyan-500 px-3 text-xs font-semibold text-zinc-950 hover:bg-cyan-400"
+                        onClick={handleGenerateFlashcardsFromNote}
+                        disabled={triageLoading || !noteContentDraft.trim()}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition hover:border-emerald-500/40 disabled:opacity-50"
                       >
-                        <Save className="h-3.5 w-3.5" />
-                        {savedToast ? 'Salvo!' : saving ? 'Salvando...' : 'Salvar'}
+                        {triageLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        Gerar Flashcards
                       </button>
-                    </div>
-                  </div>
-
-                  {notesMode === 'preview' ? (
-                    <div
-                      onDoubleClick={() => setNotesMode('edit')}
-                      className="min-h-[220px] rounded-xl bg-zinc-950/50 p-4 border border-zinc-800/60"
-                    >
-                      <RichNotesRenderer
-                        markdown={notesDraft}
-                        subjects={subjects}
-                        onOpenSubject={(id) => setSelectedId(id)}
-                      />
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap gap-1.5">
-                        {[
-                          { label: 'Título', insert: '\n## Novo Tópico\n' },
-                          { label: 'Negrito', insert: '**texto**' },
-                          { label: 'Lista', insert: '\n- Item' },
-                          { label: '+ [[Conexão]]', insert: ' [[' },
-                        ].map((btn) => (
-                          <button
-                            key={btn.label}
-                            type="button"
-                            onClick={() => handleNotesChange(notesDraft + btn.insert)}
-                            className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-[11px] text-zinc-300 hover:border-zinc-700 hover:text-zinc-100"
-                          >
-                            {btn.label}
-                          </button>
-                        ))}
-                      </div>
-                      <textarea
-                        aria-label="Notas da Matéria"
-                        rows={11}
-                        value={notesDraft}
-                        onChange={(e) => handleNotesChange(e.target.value)}
-                        className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-sm leading-relaxed text-zinc-100 focus:border-cyan-500 focus:outline-none"
-                        placeholder="Escreva suas anotações aqui... Use # para títulos, **negrito** e [[ para conectar com outra matéria!"
-                      />
-                    </div>
-                  )}
-
-                  {/* [[ Autocomplete bar */}
-                  {wikiQuery !== null && wikiCandidates.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-cyan-500/30 bg-zinc-950 p-2">
-                      <span className="text-[11px] text-cyan-300 font-medium px-1">Conectar com:</span>
-                      {wikiCandidates.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => insertWikiLink(c.name)}
-                          className="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs text-zinc-100 hover:bg-cyan-500/20 hover:text-cyan-200"
-                        >
-                          [[{c.name}]]
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* AI Suggested Connections */}
-                  {linkSuggestions.length > 0 && (
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 space-y-2">
-                      <div className="text-xs font-medium text-cyan-300">Conexões sugeridas pela IA:</div>
-                      <div className="flex flex-wrap gap-2">
-                        {linkSuggestions.map((s, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => appendWikiChip(s.targetSubject || s.label)}
-                            title={s.reason}
-                            className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20"
-                          >
-                            <Plus className="h-3 w-3" />
-                            [[{s.targetSubject || s.label}]] — {s.reason}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Backlinks Panel */}
-                  {detail.backlinks && detail.backlinks.length > 0 && (
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                      <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-400 mb-2">
-                        <Link2 className="h-3.5 w-3.5 text-cyan-400" />
-                        Backlinks ({detail.backlinks.length} matérias mencionam esta)
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {detail.backlinks.map((bl) => (
-                          <button
-                            key={bl.id}
-                            type="button"
-                            onClick={() => setSelectedId(bl.source_subject_id)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200 hover:border-cyan-500/40"
-                          >
-                            <span
-                              className="h-2 w-2 rounded-full"
-                              style={{ backgroundColor: bl.source_subject_color }}
-                            />
-                            {bl.source_subject_name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Direct Material Upload Inside Subject */}
-                <div
-                  className={`rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 space-y-4 ${
-                    mobileTab === 'materials' ? 'block' : 'hidden lg:block'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
-                      <FileUp className="h-4 w-4 text-cyan-400" />
-                      Materiais & PDFs desta Matéria ({materials.length})
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleUploadMaterial} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3.5">
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="text"
-                        placeholder="Título do material (ex: Slides Aula 01)"
-                        value={matTitle}
-                        onChange={(e) => setMatTitle(e.target.value)}
-                        className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100"
-                        required
-                      />
-                      <label className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 cursor-pointer">
-                        <FileText className="h-3.5 w-3.5" />
-                        {matFileName ? matFileName : 'Anexar PDF'}
-                        <input type="file" accept="application/pdf" onChange={handlePdfSelect} className="hidden" />
-                      </label>
-                    </div>
-
-                    <textarea
-                      rows={3}
-                      placeholder="Ou cole o texto/resumo/transcrição da aula aqui..."
-                      value={matText}
-                      onChange={(e) => setMatText(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-800 bg-zinc-900 p-2.5 text-xs text-zinc-100"
-                    />
-
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={matAutoGenerate}
-                          onChange={(e) => setMatAutoGenerate(e.target.checked)}
-                          className="rounded border-zinc-700 bg-zinc-900 text-cyan-500"
-                        />
-                        Também gerar Conceitos + Flashcards + Quiz automaticamente
-                      </label>
                       <button
-                        type="submit"
-                        disabled={uploadingMat || !matTitle.trim() || (!matText.trim() && !matPdfBase64)}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-cyan-400 disabled:opacity-50"
+                        type="button"
+                        onClick={handleSaveNote}
+                        disabled={savingNote}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
                       >
-                        {uploadingMat ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileUp className="h-3.5 w-3.5" />}
-                        {uploadingMat ? 'Enviando...' : 'Subir na Matéria'}
+                        {savingNote ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : savedNotice ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : null}
+                        {savedNotice ? 'Salvo' : 'Salvar'}
                       </button>
                     </div>
+                  </div>
 
-                    {matFeedback && <p className="text-xs text-emerald-300">{matFeedback}</p>}
-                  </form>
-
-                  {materials.length > 0 && (
-                    <div className="space-y-2">
-                      {materials.map((m) => (
-                        <div
-                          key={m.id}
-                          className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs"
-                        >
-                          <div>
-                            <span className="font-medium text-zinc-100">{m.title}</span>
-                            <span className="ml-2 text-zinc-400">
-                              {m.file_type.toUpperCase()} · {m.page_count} pág. · {m.chunk_count} blocos RAG
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMaterial(m.id)}
-                            className="p-1 text-zinc-500 hover:text-rose-400"
-                            title="Remover material"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
+                  {/* Formatting bar when editing */}
+                  {editorMode === 'edit' && (
+                    <div className="flex flex-wrap items-center gap-1 border-b border-zinc-800/60 bg-zinc-900/30 px-5 py-1.5">
+                      <button
+                        type="button"
+                        onClick={() => insertSnippet('## ', '')}
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                      >
+                        <Heading2 className="h-3.5 w-3.5" /> Título
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertSnippet('**', '**')}
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                      >
+                        <Bold className="h-3.5 w-3.5" /> Negrito
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertSnippet('- ', '')}
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                      >
+                        <List className="h-3.5 w-3.5" /> Lista
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertSnippet('- [ ] ', '')}
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                      >
+                        <CheckSquare className="h-3.5 w-3.5" /> Checklist
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertSnippet('> ', '')}
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                      >
+                        <Quote className="h-3.5 w-3.5" /> Citação
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          insertSnippet('[[', '');
+                          setWikiQuery('');
+                        }}
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-indigo-300 hover:bg-indigo-500/15"
+                      >
+                        <Link2 className="h-3.5 w-3.5" /> [[Conexão]]
+                      </button>
                     </div>
                   )}
-                </div>
-              </div>
 
-              {/* Right Pane: Core Conceptual Breakdown & Feynman Technique */}
-              <div
-                className={`space-y-4 lg:col-span-5 ${
-                  mobileTab === 'concepts' ? 'block' : 'hidden lg:block'
-                }`}
-              >
-                <form
-                  onSubmit={handleAddConcept}
-                  className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
-                    <Sparkles className="h-4 w-4 text-emerald-400" />
-                    Novo Conceito + Auto-Flashcard
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <input
-                      type="text"
-                      value={conceptSubtopic}
-                      onChange={(e) => setConceptSubtopic(e.target.value)}
-                      placeholder="Subtópico (ex: Limites)"
-                      className="min-h-[42px] rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
-                    />
-                    <input
-                      type="text"
-                      required
-                      value={conceptTitle}
-                      onChange={(e) => setConceptTitle(e.target.value)}
-                      placeholder="Título do Conceito"
-                      className="min-h-[42px] rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
-                    />
-                  </div>
-                  <textarea
-                    required
-                    rows={2}
-                    value={conceptSummary}
-                    onChange={(e) => setConceptSummary(e.target.value)}
-                    placeholder="Definição formal / regra central..."
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-100"
-                  />
-                  <textarea
-                    rows={2}
-                    value={conceptFeynman}
-                    onChange={(e) => setConceptFeynman(e.target.value)}
-                    placeholder="Técnica Feynman: explique de forma simples..."
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-100"
-                  />
-                  <button
-                    type="submit"
-                    className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-emerald-400"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Salvar Conceito & Gerar Card SM-2
-                  </button>
-                </form>
-
-                <div className="space-y-3">
-                  {detail.concepts.map((c) => (
-                    <article
-                      key={c.id}
-                      className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="font-semibold text-zinc-100">{c.title}</h3>
-                        <span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs text-zinc-300">
-                          {c.subtopic}
-                        </span>
+                  {/* AI Link Suggestions */}
+                  {suggestedLinks.length > 0 && (
+                    <div className="border-b border-indigo-500/20 bg-indigo-500/5 px-5 py-2.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-indigo-300">Conexões sugeridas pela IA:</span>
+                        <button type="button" onClick={() => setSuggestedLinks([])} className="text-zinc-500 hover:text-white">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                      <p className="mt-2 text-sm text-zinc-300">{c.summary}</p>
-                      {c.feynman_explanation && (
-                        <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-3">
-                          <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
-                            <Lightbulb className="h-3.5 w-3.5" />
-                            Analogia Feynman
-                          </p>
-                          <p className="mt-1 text-xs leading-relaxed text-emerald-100/90">
-                            {c.feynman_explanation}
-                          </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {suggestedLinks.map((sug, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => {
+                              setEditorMode('edit');
+                              setNoteContentDraft((p) => `${p}\n- Relacionado: [[${sug.target}]] — ${sug.reason}`);
+                            }}
+                            className="rounded-lg border border-indigo-500/30 bg-zinc-900 px-2.5 py-1 text-left text-xs text-zinc-200 hover:border-indigo-400"
+                          >
+                            <span className="font-semibold text-indigo-300">+ [[{sug.target}]]</span>
+                            <span className="ml-1.5 text-zinc-400">{sug.reason}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Note Content */}
+                  <div className="relative flex-1 overflow-y-auto px-6 py-6 md:px-10">
+                    <div className="mx-auto max-w-3xl space-y-5">
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl">{activeNote.icon || '📄'}</span>
+                        <input
+                          value={noteTitleDraft}
+                          onChange={(e) => setNoteTitleDraft(e.target.value)}
+                          placeholder="Título da página..."
+                          className="w-full bg-transparent text-2xl font-bold tracking-tight text-white placeholder:text-zinc-600 focus:outline-none"
+                        />
+                      </div>
+
+                      {editorMode === 'edit' ? (
+                        <div className="relative">
+                          <textarea
+                            ref={textareaRef}
+                            rows={16}
+                            value={noteContentDraft}
+                            onChange={(e) => handleEditorChange(e.target.value)}
+                            placeholder="Escreva em Markdown... Use [[ para conectar com outras notas ou matérias."
+                            className="w-full resize-y rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 font-sans text-[15px] leading-relaxed text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500/60 focus:outline-none"
+                          />
+                          {wikiQuery !== null && wikiSuggestions.length > 0 && (
+                            <div className="mt-1.5 max-w-sm rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl">
+                              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                                Conectar a uma nota ou espaço
+                              </div>
+                              {wikiSuggestions.map((s, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => insertWikiLink(s.label)}
+                                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs text-zinc-200 hover:bg-indigo-600/25"
+                                >
+                                  <span className="flex items-center gap-2 truncate">
+                                    <span>{s.icon}</span>
+                                    <span className="truncate font-medium">{s.label}</span>
+                                  </span>
+                                  <span className="ml-2 shrink-0 text-[10px] text-zinc-500">{s.sub}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
+                      ) : (
+                        <RichMarkdown content={noteContentDraft} onSelectLink={handleLinkClick} />
                       )}
-                    </article>
-                  ))}
+
+                      {/* Backlinks Footer */}
+                      <div className="border-t border-zinc-800/80 pt-5">
+                        <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                          <Link2 className="h-3.5 w-3.5 text-indigo-400" />
+                          Backlinks ({activeNote.backlinks?.length || 0})
+                        </h4>
+                        {activeNote.backlinks && activeNote.backlinks.length > 0 ? (
+                          <div className="mt-2.5 flex flex-wrap gap-2">
+                            {activeNote.backlinks.map((bl) => (
+                              <button
+                                key={bl.id}
+                                type="button"
+                                onClick={() => {
+                                  if (bl.source_note_id) {
+                                    openSubjectWorkspace(bl.source_subject_id, bl.source_note_id);
+                                  } else {
+                                    openSubjectWorkspace(bl.source_subject_id);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-1.5 text-xs text-zinc-300 hover:border-indigo-500/40 hover:text-white"
+                              >
+                                <span
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: bl.source_subject_color || '#6366f1' }}
+                                />
+                                <span>{bl.source_note_title || bl.source_subject_name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-1.5 text-xs text-zinc-500">
+                            Nenhuma nota aponta para esta página ainda. Use <code className="text-indigo-300">[[{activeNote.title}]]</code> em outra nota.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+                  <p className="text-sm text-zinc-400">Selecione uma nota na barra lateral ou crie uma nova.</p>
                 </div>
-              </div>
-            </div>
-          )}
-        </>
+              )}
+            </main>
+          </div>
+        </div>
       )}
 
-      {/* Knowledge Graph Modal */}
-      {showGraph && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-2xl space-y-4">
+      {/* CREATE SPACE MODAL */}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <form
+            onSubmit={handleCreateSpace}
+            className="w-full max-w-lg space-y-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl"
+          >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-base font-semibold text-zinc-100">
-                <GitBranch className="w-5 h-5 text-cyan-400" />
-                Mapa de Conexões (Grafo Obsidian)
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowGraph(false)}
-                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"
-              >
-                <X className="w-5 h-5" />
+              <h3 className="text-lg font-semibold text-white">Novo Espaço no Workspace</h3>
+              <button type="button" onClick={() => setShowNewModal(false)} className="text-zinc-400 hover:text-white">
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            {loadingGraph ? (
-              <div className="py-16 text-center text-sm text-zinc-400">Construindo grafo...</div>
-            ) : (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-2 overflow-hidden">
-                <svg viewBox="0 0 560 350" className="w-full h-auto">
-                  {graphData?.links.map((link) => {
-                    const src = graphNodes.find((n) => n.id === link.source_subject_id);
-                    const dst = graphNodes.find((n) => n.id === link.target_subject_id);
-                    if (!src || !dst) return null;
-                    return (
-                      <line
-                        key={link.id}
-                        x1={src.x}
-                        y1={src.y}
-                        x2={dst.x}
-                        y2={dst.y}
-                        stroke="#22d3ee"
-                        strokeOpacity="0.35"
-                        strokeWidth="2"
-                      />
-                    );
-                  })}
-                  {graphNodes.map((node) => (
-                    <g
-                      key={node.id}
-                      onClick={() => {
-                        setSelectedId(node.id);
-                        setShowGraph(false);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <circle
-                        cx={node.x}
-                        cy={node.y}
-                        r={16}
-                        fill={node.color || '#22d3ee'}
-                        fillOpacity={0.22}
-                        stroke={node.color || '#22d3ee'}
-                        strokeWidth={2}
-                      />
-                      <text
-                        x={node.x}
-                        y={node.y + 30}
-                        textAnchor="middle"
-                        fill="#e4e4e7"
-                        fontSize="11"
-                        fontWeight="600"
-                      >
-                        {node.name}
-                      </text>
-                    </g>
-                  ))}
-                </svg>
-              </div>
-            )}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setNewKind('subject')}
+                className={`rounded-xl border py-2 text-xs font-medium transition ${
+                  newKind === 'subject'
+                    ? 'border-indigo-500 bg-indigo-500/15 text-indigo-200'
+                    : 'border-zinc-800 bg-zinc-900 text-zinc-400'
+                }`}
+              >
+                📚 Matéria / Disciplina
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewKind('project')}
+                className={`rounded-xl border py-2 text-xs font-medium transition ${
+                  newKind === 'project'
+                    ? 'border-indigo-500 bg-indigo-500/15 text-indigo-200'
+                    : 'border-zinc-800 bg-zinc-900 text-zinc-400'
+                }`}
+              >
+                🚀 Projeto / Pesquisa
+              </button>
+            </div>
 
-            <p className="text-xs text-zinc-400">
-              Dica: escreva <code className="text-cyan-300">[[Nome da Matéria]]</code> dentro de qualquer nota e clique em <strong>Salvar</strong> para criar arestas no grafo. Clique em um nó para abrir a matéria.
-            </p>
+            <div className="space-y-3">
+              <input
+                required
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Ex: Anatomia Humana, Canal YouTube, TCC..."
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-sm text-white focus:border-indigo-500 focus:outline-none"
+              />
+              <input
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                placeholder="Descrição curta (opcional)"
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-zinc-400">Capa estilo Notion</label>
+              <div className="mt-1.5 grid grid-cols-6 gap-2">
+                {COVER_PRESETS.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setNewCover(c.id)}
+                    className={`h-8 rounded-lg bg-gradient-to-r ${c.gradient} ring-2 ${
+                      newCover === c.id ? 'ring-white' : 'ring-transparent'
+                    }`}
+                    title={c.label}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <label className="text-xs font-medium text-zinc-400">Ícone</label>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {ICON_PRESETS.slice(0, 8).map((ic) => (
+                    <button
+                      key={ic}
+                      type="button"
+                      onClick={() => setNewIcon(ic)}
+                      className={`rounded-lg px-2 py-1 text-base ${
+                        newIcon === ic ? 'bg-zinc-800 ring-1 ring-indigo-500' : 'hover:bg-zinc-900'
+                      }`}
+                    >
+                      {ic}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-zinc-400">Cor</label>
+                <div className="mt-1 flex gap-1.5">
+                  {COLOR_PRESETS.map((col) => (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => setNewColor(col)}
+                      style={{ backgroundColor: col }}
+                      className={`h-6 w-6 rounded-full ring-2 ${newColor === col ? 'ring-white' : 'ring-transparent'}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowNewModal(false)}
+                className="rounded-xl px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={creatingSpace}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {creatingSpace ? 'Criando...' : 'Criar Espaço'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* KNOWLEDGE GRAPH MODAL (Subjects + Notes) */}
+      {showGraph && graphData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-4xl overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3.5">
+              <div>
+                <h3 className="text-base font-semibold text-white">Mapa de Conhecimento (Obsidian Graph)</h3>
+                <p className="text-xs text-zinc-400">
+                  {graphData.subjects.length} espaços • {graphData.notes?.length || 0} notas • {graphData.links.length} conexões
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowGraph(false)} className="text-zinc-400 hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-4">
+              {graphData.subjects.length === 0 ? (
+                <p className="py-12 text-center text-sm text-zinc-400">Crie espaços e notas para visualizar o grafo.</p>
+              ) : (
+                <svg viewBox="0 0 800 440" className="h-[420px] w-full rounded-xl border border-zinc-900 bg-zinc-950">
+                  {(() => {
+                    const subs = graphData.subjects;
+                    const notes = graphData.notes || [];
+                    const pos: Record<string, { x: number; y: number; color: string }> = {};
+
+                    subs.forEach((s, idx) => {
+                      const angle = (idx / Math.max(subs.length, 1)) * Math.PI * 2 - Math.PI / 2;
+                      const rx = subs.length === 1 ? 0 : 210;
+                      const ry = subs.length === 1 ? 0 : 120;
+                      pos[`sub:${s.id}`] = {
+                        x: 400 + Math.cos(angle) * rx,
+                        y: 220 + Math.sin(angle) * ry,
+                        color: s.color || '#6366f1',
+                      };
+                    });
+
+                    notes.forEach((n, idx) => {
+                      const parent = pos[`sub:${n.subject_id}`] || { x: 400, y: 220, color: '#6366f1' };
+                      const sameSub = notes.filter((x) => x.subject_id === n.subject_id);
+                      const localIdx = sameSub.findIndex((x) => x.id === n.id);
+                      const angle = (localIdx / Math.max(sameSub.length, 1)) * Math.PI * 2 + idx * 0.2;
+                      pos[`note:${n.id}`] = {
+                        x: Math.max(40, Math.min(760, parent.x + Math.cos(angle) * 68)),
+                        y: Math.max(35, Math.min(405, parent.y + Math.sin(angle) * 58)),
+                        color: parent.color,
+                      };
+                    });
+
+                    return (
+                      <>
+                        {/* Parent-to-note lines */}
+                        {notes.map((n) => {
+                          const p1 = pos[`sub:${n.subject_id}`];
+                          const p2 = pos[`note:${n.id}`];
+                          if (!p1 || !p2) return null;
+                          return (
+                            <line
+                              key={`tree-${n.id}`}
+                              x1={p1.x}
+                              y1={p1.y}
+                              x2={p2.x}
+                              y2={p2.y}
+                              stroke="#27272a"
+                              strokeWidth="1.2"
+                            />
+                          );
+                        })}
+
+                        {/* Wikilink connections */}
+                        {graphData.links.map((l) => {
+                          const fromKey = l.source_note_id ? `note:${l.source_note_id}` : `sub:${l.source_subject_id}`;
+                          const toKey = l.target_note_id
+                            ? `note:${l.target_note_id}`
+                            : l.target_subject_id
+                              ? `sub:${l.target_subject_id}`
+                              : null;
+                          if (!toKey) return null;
+                          const p1 = pos[fromKey];
+                          const p2 = pos[toKey];
+                          if (!p1 || !p2) return null;
+                          return (
+                            <line
+                              key={l.id}
+                              x1={p1.x}
+                              y1={p1.y}
+                              x2={p2.x}
+                              y2={p2.y}
+                              stroke="#818cf8"
+                              strokeOpacity="0.65"
+                              strokeWidth="1.6"
+                              strokeDasharray="4 2"
+                            />
+                          );
+                        })}
+
+                        {/* Note nodes */}
+                        {notes.map((n) => {
+                          const p = pos[`note:${n.id}`];
+                          if (!p) return null;
+                          return (
+                            <g
+                              key={`n-${n.id}`}
+                              className="cursor-pointer"
+                              onClick={() => {
+                                setShowGraph(false);
+                                openSubjectWorkspace(n.subject_id, n.id);
+                              }}
+                            >
+                              <circle cx={p.x} cy={p.y} r="6.5" fill="#18181b" stroke={p.color} strokeWidth="2" />
+                              <text x={p.x} y={p.y + 17} textAnchor="middle" fill="#a1a1aa" fontSize="10">
+                                {n.title.slice(0, 18)}
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Subject nodes */}
+                        {subs.map((s) => {
+                          const p = pos[`sub:${s.id}`];
+                          if (!p) return null;
+                          return (
+                            <g
+                              key={`s-${s.id}`}
+                              className="cursor-pointer"
+                              onClick={() => {
+                                setShowGraph(false);
+                                openSubjectWorkspace(s.id);
+                              }}
+                            >
+                              <circle cx={p.x} cy={p.y} r="15" fill={p.color} fillOpacity="0.25" stroke={p.color} strokeWidth="2.5" />
+                              <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="13">
+                                {s.icon || '📚'}
+                              </text>
+                              <text x={p.x} y={p.y - 21} textAnchor="middle" fill="#f4f4f5" fontSize="11.5" fontWeight="600">
+                                {s.name}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </svg>
+              )}
+            </div>
           </div>
         </div>
       )}

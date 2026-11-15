@@ -338,13 +338,38 @@ export async function initDatabase(): Promise<void> {
       focus_level INTEGER NOT NULL DEFAULT 3,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+      parent_id TEXT,
+      title TEXT NOT NULL,
+      icon TEXT NOT NULL DEFAULT '📄',
+      cover_style TEXT NOT NULL DEFAULT '',
+      page_type TEXT NOT NULL DEFAULT 'note',
+      status TEXT NOT NULL DEFAULT 'active',
+      content_markdown TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
-  // Safe migration for existing databases lacking routine_json
-  try {
-    await execDDL(`ALTER TABLE learning_profile ADD COLUMN routine_json TEXT NOT NULL DEFAULT '{}'`);
-  } catch {
-    // Column already exists
+  // Safe migrations for existing databases
+  const safeAlters = [
+    `ALTER TABLE learning_profile ADD COLUMN routine_json TEXT NOT NULL DEFAULT '{}'`,
+    `ALTER TABLE subjects ADD COLUMN icon TEXT NOT NULL DEFAULT '📘'`,
+    `ALTER TABLE subjects ADD COLUMN cover_style TEXT NOT NULL DEFAULT 'gradient-ocean'`,
+    `ALTER TABLE subjects ADD COLUMN kind TEXT NOT NULL DEFAULT 'subject'`,
+    `ALTER TABLE note_links ADD COLUMN source_note_id TEXT`,
+    `ALTER TABLE note_links ADD COLUMN target_note_id TEXT`,
+  ];
+  for (const sql of safeAlters) {
+    try {
+      await execDDL(sql);
+    } catch {
+      // Column already exists
+    }
   }
 
   if (isPostgres) {

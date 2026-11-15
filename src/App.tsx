@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
-  BarChart3,
   BookOpen,
   Bot,
   Brain,
@@ -13,7 +12,6 @@ import {
   LogOut,
   Sparkles,
   Webhook,
-  Zap,
 } from 'lucide-react';
 import { api } from './api/client';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
@@ -25,9 +23,7 @@ import { SubjectHub } from './components/SubjectHub';
 import { LibraryInbox } from './components/LibraryInbox';
 import { AiTutorChat } from './components/AiTutorChat';
 import { ProfessorPlanner } from './components/ProfessorPlanner';
-import { ActiveRecallQuiz } from './components/ActiveRecallQuiz';
-import { SpacedRepetitionQueue } from './components/SpacedRepetitionQueue';
-import { AnalyticsView } from './components/AnalyticsView';
+import { PracticeCenter } from './components/PracticeCenter';
 import { AutomationCenter } from './components/AutomationCenter';
 import type { AnalyticsData, NavView, QuizSummary, RecoveryPlan, Subject } from './types';
 
@@ -37,26 +33,19 @@ export function App() {
 
   const [view, setView] = useState<NavView>(() => {
     const params = new URLSearchParams(window.location.search);
-    const v = params.get('view') as NavView | null;
+    const v = params.get('view');
+    if (v && ['quizzes', 'reviews', 'analytics'].includes(v)) {
+      return 'practice';
+    }
     if (
       v &&
-      [
-        'dashboard',
-        'subjects',
-        'library',
-        'tutor',
-        'professor',
-        'quizzes',
-        'reviews',
-        'analytics',
-        'automation',
-      ].includes(v)
+      ['dashboard', 'subjects', 'library', 'tutor', 'professor', 'practice', 'automation'].includes(v)
     ) {
-      return v;
+      return v as NavView;
     }
     return 'dashboard';
   });
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string | undefined>(undefined);
+  const [_selectedSubjectId, setSelectedSubjectId] = useState<string | undefined>(undefined);
   const [selectedQuizId, setSelectedQuizId] = useState<string | undefined>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('quizId') || undefined;
@@ -147,14 +136,11 @@ export function App() {
 
   const navItems: Array<{ id: NavView; label: string; icon: typeof LayoutDashboard; badge?: number }> = [
     { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
-    { id: 'subjects', label: 'Matérias', icon: BookOpen },
+    { id: 'subjects', label: 'Workspace', icon: BookOpen },
     { id: 'library', label: 'Biblioteca', icon: Library },
     { id: 'tutor', label: 'Tutor IA', icon: Bot },
     { id: 'professor', label: 'Professor', icon: GraduationCap },
-    { id: 'quizzes', label: 'Quizzes', icon: Zap },
-    { id: 'reviews', label: 'Revisões', icon: Layers, badge: analytics?.totals.due_cards || 0 },
-    { id: 'analytics', label: 'Métricas', icon: BarChart3 },
-    { id: 'automation', label: 'Webhooks', icon: Webhook },
+    { id: 'practice', label: 'Prática', icon: Layers, badge: analytics?.totals.due_cards || 0 },
   ];
 
   return (
@@ -203,6 +189,18 @@ export function App() {
         </div>
 
         <div className="space-y-2 border-t border-zinc-800/80 pt-4">
+          <button
+            type="button"
+            onClick={() => handleNavigate('automation')}
+            className={`flex min-h-[38px] w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition ${
+              view === 'automation'
+                ? 'bg-cyan-500/15 text-cyan-300'
+                : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100'
+            }`}
+          >
+            <Webhook className="h-3.5 w-3.5" />
+            Webhooks & WhatsApp
+          </button>
           {pwa.canInstall && (
             <button
               type="button"
@@ -243,6 +241,18 @@ export function App() {
               <span className="font-bold text-zinc-50">Study OS</span>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Webhooks e WhatsApp"
+                onClick={() => handleNavigate('automation')}
+                className={`inline-flex min-h-[36px] items-center gap-1 rounded-lg border px-2.5 text-xs ${
+                  view === 'automation'
+                    ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
+                    : 'border-zinc-800 bg-zinc-900 text-zinc-300'
+                }`}
+              >
+                <Webhook className="h-3.5 w-3.5" />
+              </button>
               {pwa.canInstall && (
                 <button
                   type="button"
@@ -285,7 +295,7 @@ export function App() {
                   onClick={() => {
                     const qid = autoQuizBanner.quizId;
                     setAutoQuizBanner(null);
-                    handleNavigate('quizzes', { quizId: qid });
+                    handleNavigate('practice', { quizId: qid });
                   }}
                   className="min-h-[38px] rounded-xl bg-violet-500 px-3.5 text-xs font-semibold text-white hover:bg-violet-400"
                 >
@@ -321,13 +331,7 @@ export function App() {
             />
           )}
 
-          {view === 'subjects' && (
-            <SubjectHub
-              subjects={subjects}
-              initialSubjectId={selectedSubjectId}
-              onRefreshSubjects={refreshAll}
-            />
-          )}
+          {view === 'subjects' && <SubjectHub onNavigate={handleNavigate} />}
 
           {view === 'library' && (
             <LibraryInbox subjects={subjects} onDataChanged={refreshAll} onNotify={notify} />
@@ -337,19 +341,16 @@ export function App() {
 
           {view === 'professor' && <ProfessorPlanner subjects={subjects} onNotify={notify} />}
 
-          {view === 'quizzes' && (
-            <ActiveRecallQuiz
+          {view === 'practice' && (
+            <PracticeCenter
+              subjects={subjects}
               quizzes={quizzes}
+              analytics={analytics}
+              dueCardsCount={analytics?.totals.due_cards || 0}
               initialQuizId={selectedQuizId}
-              onQuizCompleted={refreshAll}
+              onRefresh={refreshAll}
             />
           )}
-
-          {view === 'reviews' && (
-            <SpacedRepetitionQueue subjects={subjects} onReviewed={refreshAll} />
-          )}
-
-          {view === 'analytics' && <AnalyticsView analytics={analytics} />}
 
           {view === 'automation' && (
             <AutomationCenter

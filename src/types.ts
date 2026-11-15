@@ -4,9 +4,7 @@ export type NavView =
   | 'library'
   | 'tutor'
   | 'professor'
-  | 'quizzes'
-  | 'reviews'
-  | 'analytics'
+  | 'practice'
   | 'automation';
 
 export interface Book {
@@ -44,17 +42,56 @@ export interface BacklinkItem {
   source_subject_id: string;
   source_subject_name: string;
   source_subject_color: string;
+  source_note_id?: string | null;
   target_label: string;
   created_at: string;
 }
 
+export interface NoteItem {
+  id: string;
+  subject_id: string;
+  parent_id: string | null;
+  title: string;
+  icon: string;
+  cover_style: string;
+  page_type: 'note' | 'folder' | 'project';
+  status: string;
+  content_markdown: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NoteBacklink {
+  id: string;
+  source_note_id: string | null;
+  source_note_title?: string | null;
+  source_subject_id: string;
+  source_subject_name: string;
+  source_subject_color: string;
+  target_label: string;
+  created_at: string;
+}
+
+export interface NoteDetail extends NoteItem {
+  backlinks: NoteBacklink[];
+}
+
 export interface GraphData {
-  subjects: Array<{ id: string; name: string; color: string }>;
+  subjects: Array<{ id: string; name: string; color: string; icon?: string; kind?: string }>;
+  notes?: Array<{
+    id: string;
+    subject_id: string;
+    title: string;
+    icon: string;
+    page_type: string;
+  }>;
   links: Array<{
     id: string;
     source_subject_id: string;
+    source_note_id?: string | null;
     target_label: string;
     target_subject_id: string | null;
+    target_note_id?: string | null;
   }>;
 }
 
@@ -206,6 +243,9 @@ export interface Subject {
   name: string;
   slug: string;
   color: string;
+  icon?: string;
+  cover_style?: string;
+  kind?: 'subject' | 'project';
   description: string;
   notes_markdown: string;
   transcript_markdown: string;
@@ -214,6 +254,7 @@ export interface Subject {
   concept_count?: number;
   card_count?: number;
   due_count?: number;
+  note_count?: number;
 }
 
 export interface Concept {
@@ -229,6 +270,7 @@ export interface Concept {
 export interface SubjectDetail extends Subject {
   concepts: Concept[];
   flashcards: Flashcard[];
+  notes?: NoteItem[];
   backlinks?: BacklinkItem[];
 }
 

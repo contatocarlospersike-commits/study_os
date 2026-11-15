@@ -13,20 +13,28 @@ export const cognitiveRouter = Router();
 
 // --- Obsidian Graph & Backlinks ---
 cognitiveRouter.get('/graph', async (req, res) => {
-  const subjects = await queryAll<{ id: string; name: string; color: string }>(
-    `SELECT id, name, color FROM subjects WHERE user_id = ?`,
+  const subjects = await queryAll<{ id: string; name: string; color: string; icon?: string; kind?: string }>(
+    `SELECT id, name, color, icon, kind FROM subjects WHERE user_id = ?`,
+    [req.userId]
+  );
+  const notes = await queryAll<{ id: string; title: string; subject_id: string; icon: string }>(
+    `SELECT id, title, subject_id, icon FROM notes WHERE user_id = ?`,
     [req.userId]
   );
   const links = await queryAll<{
     id: string;
     source_subject_id: string;
+    source_note_id: string | null;
     target_label: string;
     target_subject_id: string | null;
-  }>(`SELECT id, source_subject_id, target_label, target_subject_id FROM note_links WHERE user_id = ?`, [
-    req.userId,
-  ]);
+    target_note_id: string | null;
+  }>(
+    `SELECT id, source_subject_id, source_note_id, target_label, target_subject_id, target_note_id
+     FROM note_links WHERE user_id = ?`,
+    [req.userId]
+  );
 
-  res.json({ subjects, links });
+  res.json({ subjects, notes, links });
 });
 
 cognitiveRouter.post('/subjects/:id/suggest-links', async (req, res) => {

@@ -10,7 +10,8 @@ subjectsRouter.get('/', async (req, res) => {
     `SELECT s.*,
       (SELECT COUNT(*) FROM concepts c WHERE c.subject_id = s.id AND c.user_id = s.user_id) as concept_count,
       (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id AND f.user_id = s.user_id) as card_count,
-      (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id AND f.user_id = s.user_id AND f.due_at <= ?) as due_count
+      (SELECT COUNT(*) FROM flashcards f WHERE f.subject_id = s.id AND f.user_id = s.user_id AND f.due_at <= ?) as due_count,
+      (SELECT COUNT(*) FROM notes n WHERE n.subject_id = s.id AND n.user_id = s.user_id) as note_count
      FROM subjects s
      WHERE s.user_id = ?
      ORDER BY s.updated_at DESC`,
@@ -22,6 +23,7 @@ subjectsRouter.get('/', async (req, res) => {
       concept_count: Number(s.concept_count ?? 0),
       card_count: Number(s.card_count ?? 0),
       due_count: Number(s.due_count ?? 0),
+      note_count: Number(s.note_count ?? 0),
     }))
   );
 });
@@ -54,11 +56,38 @@ subjectsRouter.get('/:id', async (req, res) => {
      ORDER BY nl.created_at DESC`,
     [req.userId, req.params.id, req.params.id, subjectNameLower]
   );
-  res.json({ ...subject, concepts, flashcards, backlinks });
+  let notes = await queryAll(
+    `SELECT * FROM notes WHERE subject_id = ? AND user_id = ? ORDER BY page_type DESC, updated_at DESC`,
+    [req.params.id, req.userId]
+  );
+  const legacyNotes = String((subject as { notes_markdown?: string }).notes_markdown ?? '').trim();
+  if (notes.length === 0 && legacyNotes) {
+    const noteId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await execute(
+      `INSERT INTO notes (id, user_id, subject_id, parent_id, title, icon, cover_style, page_type, status, content_markdown, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, 'Notas Gerais', '📝', '', 'note', 'active', ?, ?, ?)`,
+      [noteId, req.userId, req.params.id, legacyNotes, now, now]
+    );
+    notes = await queryAll(
+      `SELECT * FROM notes WHERE subject_id = ? AND user_id = ? ORDER BY page_type DESC, updated_at DESC`,
+      [req.params.id, req.userId]
+    );
+  }
+  res.json({ ...subject, concepts, flashcards, backlinks, notes });
 });
 
 subjectsRouter.post('/', async (req, res) => {
-  const { name, color = '#22d3ee', description = '', notes_markdown = '', transcript_markdown = '' } = req.body;
+  const {
+    name,
+    color = '#22d3ee',
+    description = '',
+    notes_markdown = '',
+    transcript_markdown = '',
+    icon = '📘',
+    cover_style = 'gradient-ocean',
+    kind = 'subject',
+  } = req.body;
   if (!name || typeof name !== 'string') {
     res.status(400).json({ error: 'Subject name is required' });
     return;
@@ -74,9 +103,30 @@ subjectsRouter.post('/', async (req, res) => {
   const now = new Date().toISOString();
 
   await execute(
-    `INSERT INTO subjects (id, user_id, name, slug, color, description, notes_markdown, transcript_markdown, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, req.userId, name.trim(), slug, color, description, notes_markdown, transcript_markdown, now, now]
+    `INSERT INTO subjects (id, user_id, name, slug, color, description, notes_markdown, transcript_markdown, icon, cover_style, kind, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      req.userId,
+      name.trim(),
+      slug,
+      color,
+      description,
+      notes_markdown,
+      transcript_markdown,
+      icon,
+      cover_style,
+      kind,
+      now,
+      now,
+    ]
+  );
+
+  // Create a starter empty note so the workspace opens cleanly
+  await execute(
+    `INSERT INTO notes (id, user_id, subject_id, parent_id, title, icon, cover_style, page_type, status, content_markdown, created_at, updated_at)
+     VALUES (?, ?, ?, NULL, 'Visão Geral', '📄', '', 'note', 'active', '', ?, ?)`,
+    [crypto.randomUUID(), req.userId, id, now, now]
   );
 
   const created = await queryOne(`SELECT * FROM subjects WHERE id = ? AND user_id = ?`, [id, req.userId]);
@@ -92,14 +142,14 @@ subjectsRouter.patch('/:id', async (req, res) => {
     res.status(404).json({ error: 'Subject not found' });
     return;
   }
-  const { name, color, description, notes_markdown, transcript_markdown } = req.body;
+  const { name, color, description, notes_markdown, transcript_markdown, icon, cover_style, kind } = req.body;
   const now = new Date().toISOString();
 
   const nextNotes = String(notes_markdown ?? existing.notes_markdown ?? '');
 
   await execute(
     `UPDATE subjects
-     SET name = ?, color = ?, description = ?, notes_markdown = ?, transcript_markdown = ?, updated_at = ?
+     SET name = ?, color = ?, description = ?, notes_markdown = ?, transcript_markdown = ?, icon = ?, cover_style = ?, kind = ?, updated_at = ?
      WHERE id = ? AND user_id = ?`,
     [
       name ?? existing.name,
@@ -107,6 +157,9 @@ subjectsRouter.patch('/:id', async (req, res) => {
       description ?? existing.description,
       nextNotes,
       transcript_markdown ?? existing.transcript_markdown,
+      icon ?? existing.icon ?? '📚',
+      cover_style ?? existing.cover_style ?? 'aurora',
+      kind === 'project' ? 'project' : (kind === 'subject' ? 'subject' : (existing.kind ?? 'subject')),
       now,
       req.params.id,
       req.userId,
