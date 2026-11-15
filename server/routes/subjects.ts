@@ -153,6 +153,11 @@ subjectsRouter.patch('/:id', async (req, res) => {
   res.json(updated);
 });
 
+subjectsRouter.delete('/:id', async (req, res) => {
+  await execute(`DELETE FROM subjects WHERE id = ? AND user_id = ?`, [req.params.id, req.userId]);
+  res.json({ ok: true });
+});
+
 subjectsRouter.post('/:id/concepts', async (req, res) => {
   const subject = await queryOne(`SELECT id FROM subjects WHERE id = ? AND user_id = ?`, [
     req.params.id,

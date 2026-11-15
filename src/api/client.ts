@@ -62,6 +62,8 @@ export const api = {
     id: string,
     body: Partial<Pick<Subject, 'name' | 'color' | 'description' | 'notes_markdown' | 'transcript_markdown'>>
   ) => request<Subject>(`/api/subjects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteSubject: (id: string) =>
+    request<{ ok: boolean }>(`/api/subjects/${id}`, { method: 'DELETE' }),
   createConcept: (
     subjectId: string,
     body: { subtopic: string; title: string; summary: string; feynman_explanation: string }

@@ -378,13 +378,6 @@ export async function ensureUserInitialized(userId: string): Promise<void> {
     [userId, now]
   );
 
-  const row = await queryOne<{ count: number | string }>(
-    'SELECT COUNT(*) as count FROM subjects WHERE user_id = ?',
-    [userId]
-  );
-  if (Number(row?.count ?? 0) === 0) {
-    await seedUser(userId);
-  }
   seededUsers.add(userId);
 }
 
