@@ -63,9 +63,20 @@ export function AiTutorChat({ subjects }: AiTutorChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [thinkingSec, setThinkingSec] = useState(0);
+  const [lastQuestion, setLastQuestion] = useState('');
   const [englishMode, setEnglishMode] = useState(false);
   const [chatError, setChatError] = useState('');
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!sending) {
+      setThinkingSec(0);
+      return;
+    }
+    const id = setInterval(() => setThinkingSec((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [sending]);
 
   const loadMaterials = async () => {
     const list = await api.getMaterials();
@@ -119,6 +130,7 @@ export function AiTutorChat({ subjects }: AiTutorChatProps) {
     const question = (customText ?? input).trim();
     if (!question || sending) return;
     setChatError('');
+    setLastQuestion(question);
     if (!customText) setInput('');
 
     const optimisticUser: ChatMessage = {
@@ -371,12 +383,40 @@ export function AiTutorChat({ subjects }: AiTutorChatProps) {
                 )}
               </div>
             ))}
+
+            {sending && (
+              <div className="mr-auto max-w-[85%] rounded-2xl border border-cyan-500/30 bg-zinc-950/90 px-4 py-3 text-zinc-200">
+                <div className="flex items-center gap-2.5 text-xs font-medium text-cyan-300">
+                  <span className="h-2.5 w-2.5 animate-ping rounded-full bg-cyan-400" />
+                  <span>
+                    {thinkingSec < 2
+                      ? 'Buscando trechos nos seus materiais (RAG)...'
+                      : thinkingSec < 5
+                        ? 'Elaborando resposta com citações...'
+                        : 'Auditando resposta contra alucinações (Crítico)...'}
+                  </span>
+                  <span className="ml-auto font-mono text-[11px] text-zinc-400">{thinkingSec}s</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {chatError && (
-            <p className="mt-2 rounded-xl border border-rose-500/40 bg-rose-950/40 px-3 py-2 text-xs text-rose-200">
-              {chatError}
-            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-500/40 bg-rose-950/40 px-3.5 py-2.5 text-xs text-rose-200">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                <span>Erro ao gerar resposta: {chatError}</span>
+              </div>
+              {lastQuestion && (
+                <button
+                  type="button"
+                  onClick={() => void handleSend(lastQuestion)}
+                  className="rounded-lg bg-rose-500/20 px-2.5 py-1 font-semibold text-rose-100 hover:bg-rose-500/30"
+                >
+                  Tentar novamente
+                </button>
+              )}
+            </div>
           )}
 
           <form
