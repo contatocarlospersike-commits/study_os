@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { isPostgresDb, queryAll } from '../db.js';
 
-const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.8-flash';
+const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.5-flash';
 const EMBED_MODEL = 'gemini-embedding-001';
 
 function getAiClient(): GoogleGenAI {
