@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { execute, queryAll, queryOne } from '../db.js';
 import {
   evaluateProfessorExplanation,
+  evaluateYoutubeLesson,
   generateDailyStudyPlan,
   generateProfessorLesson,
   suggestObsidianLinks,
@@ -74,19 +75,89 @@ cognitiveRouter.post('/professor/lesson', async (req, res) => {
 });
 
 cognitiveRouter.post('/professor/evaluate', async (req, res) => {
-  const { topic, explanation } = req.body;
-  if (!topic || !explanation) {
-    res.status(400).json({ error: 'topic e explanation são obrigatórios.' });
+  const topic = req.body.topic;
+  const userExplanation = req.body.user_explanation || req.body.explanation;
+  if (!topic || !userExplanation) {
+    res.status(400).json({ error: 'topic e user_explanation são obrigatórios.' });
     return;
   }
-  const evaluation = await evaluateProfessorExplanation(topic, explanation);
+  const evaluation = await evaluateProfessorExplanation(topic, userExplanation);
   res.json(evaluation);
 });
 
-// --- Planejador Diário ---
+cognitiveRouter.post('/professor/evaluate-video', async (req, res) => {
+  const { subject_id, topic, youtube_url, transcript_fallback } = req.body;
+  if (!topic || (!youtube_url && !transcript_fallback)) {
+    res.status(400).json({ error: 'Informe o tópico e o link do YouTube ou transcrição.' });
+    return;
+  }
+  const subject = subject_id
+    ? await queryOne<{ name: string }>(`SELECT name FROM subjects WHERE id = ? AND user_id = ?`, [
+        subject_id,
+        req.userId,
+      ])
+    : null;
+
+  const evaluation = await evaluateYoutubeLesson({
+    subjectName: subject?.name || 'Geral',
+    topic,
+    youtubeUrl: youtube_url,
+    transcriptFallback: transcript_fallback,
+  });
+  res.json(evaluation);
+});
+
+// --- Planejador Diário + Rotina + Checklist ---
+cognitiveRouter.get('/checklist', async (req, res) => {
+  const items = await queryAll(
+    `SELECT * FROM study_checklist_items WHERE user_id = ? ORDER BY completed ASC, created_at DESC LIMIT 40`,
+    [req.userId]
+  );
+  res.json(items);
+});
+
+cognitiveRouter.post('/checklist/:id/toggle', async (req, res) => {
+  const item = await queryOne<{ id: string; completed: number }>(
+    `SELECT id, completed FROM study_checklist_items WHERE id = ? AND user_id = ?`,
+    [req.params.id, req.userId]
+  );
+  if (!item) {
+    res.status(404).json({ error: 'Item não encontrado.' });
+    return;
+  }
+  const next = item.completed ? 0 : 1;
+  await execute(`UPDATE study_checklist_items SET completed = ? WHERE id = ? AND user_id = ?`, [
+    next,
+    req.params.id,
+    req.userId,
+  ]);
+  const updated = await queryOne(`SELECT * FROM study_checklist_items WHERE id = ? AND user_id = ?`, [
+    req.params.id,
+    req.userId,
+  ]);
+  res.json(updated);
+});
+
+cognitiveRouter.delete('/checklist/:id', async (req, res) => {
+  await execute(`DELETE FROM study_checklist_items WHERE id = ? AND user_id = ?`, [
+    req.params.id,
+    req.userId,
+  ]);
+  res.json({ ok: true });
+});
+
 cognitiveRouter.post('/planner/today', async (req, res) => {
   const availableMinutes = Math.max(15, Number(req.body.available_minutes || 60));
+  const routine = req.body.routine || undefined;
   const nowIso = new Date().toISOString();
+  const todayDate = nowIso.slice(0, 10);
+
+  if (routine) {
+    await execute(
+      `UPDATE learning_profile SET routine_json = ?, updated_at = ? WHERE user_id = ?`,
+      [JSON.stringify(routine), nowIso, req.userId]
+    );
+  }
 
   const subjects = await queryAll<{ name: string; due_count: number | string }>(
     `SELECT s.name,
@@ -100,12 +171,20 @@ cognitiveRouter.post('/planner/today', async (req, res) => {
     [req.userId]
   );
 
-  const profile = await queryOne<{ preferred_block_min: number }>(
-    `SELECT preferred_block_min FROM learning_profile WHERE user_id = ?`,
+  const profile = await queryOne<{ preferred_block_min: number; routine_json?: string }>(
+    `SELECT preferred_block_min, routine_json FROM learning_profile WHERE user_id = ?`,
     [req.userId]
   );
 
   const totalDue = subjects.reduce((acc, s) => acc + Number(s.due_count), 0);
+  let effectiveRoutine = routine;
+  if (!effectiveRoutine && profile?.routine_json) {
+    try {
+      effectiveRoutine = JSON.parse(profile.routine_json);
+    } catch {
+      effectiveRoutine = undefined;
+    }
+  }
 
   const plan = await generateDailyStudyPlan({
     availableMinutes,
@@ -113,9 +192,38 @@ cognitiveRouter.post('/planner/today', async (req, res) => {
     pendingRecoveries: Number(pendingRec?.count ?? 0),
     subjects: subjects.map((s) => ({ name: s.name, due_count: Number(s.due_count) })),
     preferredBlockMin: profile?.preferred_block_min ?? 25,
+    routine: effectiveRoutine,
   });
 
-  res.json(plan);
+  // Save today's blocks into persistent checklist (replacing uncompleted items from today)
+  await execute(
+    `DELETE FROM study_checklist_items WHERE user_id = ? AND scheduled_date = ? AND completed = 0`,
+    [req.userId, todayDate]
+  );
+  for (const b of plan.blocks || []) {
+    await execute(
+      `INSERT INTO study_checklist_items (id, user_id, title, subject_name, action_type, duration_min, reason, completed, scheduled_date, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      [
+        crypto.randomUUID(),
+        req.userId,
+        b.title,
+        b.subjectName,
+        b.actionType,
+        b.durationMin,
+        b.reason,
+        todayDate,
+        nowIso,
+      ]
+    );
+  }
+
+  const checklist = await queryAll(
+    `SELECT * FROM study_checklist_items WHERE user_id = ? ORDER BY completed ASC, created_at DESC LIMIT 40`,
+    [req.userId]
+  );
+
+  res.json({ ...plan, checklist });
 });
 
 // --- Calibração do Perfil Cognitivo ---

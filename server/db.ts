@@ -311,7 +311,21 @@ export async function initDatabase(): Promise<void> {
       visual_preference INTEGER NOT NULL DEFAULT 1,
       frequent_questions INTEGER NOT NULL DEFAULT 1,
       english_level TEXT NOT NULL DEFAULT 'intermediate',
+      routine_json TEXT NOT NULL DEFAULT '{}',
       updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS study_checklist_items (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      subject_name TEXT NOT NULL DEFAULT 'Geral',
+      action_type TEXT NOT NULL DEFAULT 'study',
+      duration_min INTEGER NOT NULL DEFAULT 25,
+      reason TEXT NOT NULL DEFAULT '',
+      completed INTEGER NOT NULL DEFAULT 0,
+      scheduled_date TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS study_checkins (
@@ -325,6 +339,13 @@ export async function initDatabase(): Promise<void> {
       created_at TEXT NOT NULL
     );
   `);
+
+  // Safe migration for existing databases lacking routine_json
+  try {
+    await execDDL(`ALTER TABLE learning_profile ADD COLUMN routine_json TEXT NOT NULL DEFAULT '{}'`);
+  } catch {
+    // Column already exists
+  }
 
   if (isPostgres) {
     await execDDL(`

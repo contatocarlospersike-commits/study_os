@@ -13,7 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { api } from '../api/client';
-import type { Book, OpenCatalogItem, Subject, TriageResult } from '../types';
+import type { Book, OpenCatalogItem, Subject, SuggestedBook, TriageResult } from '../types';
 
 interface LibraryInboxProps {
   subjects: Subject[];
@@ -49,6 +49,13 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
   const [newUrl, setNewUrl] = useState('');
   const [newTotalPages, setNewTotalPages] = useState(300);
   const [newSubjectId, setNewSubjectId] = useState<string>('');
+
+  // AI Book Suggestions (max 3 per subject)
+  const [suggestSubjectId, setSuggestSubjectId] = useState<string>(subjects[0]?.id || '');
+  const [suggestingBooks, setSuggestingBooks] = useState(false);
+  const [suggestedBooks, setSuggestedBooks] = useState<SuggestedBook[]>([]);
+  const [selectedSuggestedIdx, setSelectedSuggestedIdx] = useState<number[]>([]);
+  const [addingSuggested, setAddingSuggested] = useState(false);
 
   // Selective reading AI
   const [examGoal, setExamGoal] = useState('');
@@ -148,6 +155,55 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
       onNotify('Adicionado com 1 clique', `"${item.title}" salvo em Meus Livros.`);
     } catch (err) {
       onNotify('Erro', (err as Error).message);
+    }
+  };
+
+  const handleSuggestBooks = async () => {
+    const targetId = suggestSubjectId || subjects[0]?.id;
+    if (!targetId) return;
+    setSuggestingBooks(true);
+    setSuggestedBooks([]);
+    setSelectedSuggestedIdx([]);
+    try {
+      const res = await api.suggestBooksForSubject(targetId);
+      setSuggestedBooks(res.books.slice(0, 3));
+      setSelectedSuggestedIdx(res.books.slice(0, 3).map((_, i) => i));
+    } catch (err) {
+      onNotify('Erro ao sugerir livros', (err as Error).message);
+    } finally {
+      setSuggestingBooks(false);
+    }
+  };
+
+  const handleAddSelectedSuggestions = async () => {
+    const targetId = suggestSubjectId || subjects[0]?.id || null;
+    const chosen = selectedSuggestedIdx.map((i) => suggestedBooks[i]).filter(Boolean);
+    if (chosen.length === 0) return;
+    setAddingSuggested(true);
+    try {
+      const createdList: Book[] = [];
+      for (const s of chosen) {
+        const created = await api.createBook({
+          title: s.title,
+          author: s.author,
+          source_type: s.pearson_likely ? 'pearson' : 'open_access',
+          external_url: s.open_pdf_url,
+          total_pages: s.estimated_pages || 250,
+          subject_id: targetId,
+          summary_markdown: s.reason,
+          status: 'to_read',
+        });
+        createdList.push(created);
+      }
+      setBooks((prev) => [...createdList, ...prev]);
+      if (createdList[0]) setSelectedBookId(createdList[0].id);
+      setSuggestedBooks([]);
+      setSelectedSuggestedIdx([]);
+      onNotify('Livros aprovados!', `${createdList.length} livro(s) adicionados à estante.`);
+    } catch (err) {
+      onNotify('Erro ao adicionar', (err as Error).message);
+    } finally {
+      setAddingSuggested(false);
     }
   };
 
@@ -255,6 +311,123 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
 
       {/* SUBTAB 1: MEUS LIVROS */}
       {subTab === 'books' && (
+        <div className="space-y-4">
+          {/* AI Curadoria (até 3 livros por matéria + link PDF aberto) */}
+          <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  Sugestão Inteligente de Livros (Máx. 3 por Matéria)
+                </div>
+                <p className="text-xs text-slate-400">
+                  A IA analisa os materiais da sua matéria, indica até 3 livros e traz links de busca legal para PDF aberto / Pearson.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={suggestSubjectId || subjects[0]?.id || ''}
+                  onChange={(e) => setSuggestSubjectId(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100"
+                >
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleSuggestBooks}
+                  disabled={suggestingBooks || subjects.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500 text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
+                >
+                  {suggestingBooks ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  Sugerir Livros
+                </button>
+              </div>
+            </div>
+
+            {suggestedBooks.length > 0 && (
+              <div className="pt-2 border-t border-slate-800 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {suggestedBooks.map((sb, idx) => {
+                    const checked = selectedSuggestedIdx.includes(idx);
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() =>
+                          setSelectedSuggestedIdx((prev) =>
+                            prev.includes(idx) ? prev.filter((x) => x !== idx) : [...prev, idx]
+                          )
+                        }
+                        className={`cursor-pointer p-3 rounded-xl border transition-all space-y-1.5 ${
+                          checked
+                            ? 'bg-cyan-950/30 border-cyan-500/50'
+                            : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-xs font-semibold text-slate-100">{sb.title}</div>
+                          <input type="checkbox" checked={checked} readOnly className="mt-0.5" />
+                        </div>
+                        <div className="text-[11px] text-slate-400">{sb.author}</div>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">{sb.reason}</p>
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-cyan-300">
+                            {sb.pearson_likely ? 'Pearson / Acadêmico' : sb.availability_hint}
+                          </span>
+                          {sb.open_pdf_url && (
+                            <a
+                              href={sb.open_pdf_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 text-[11px] text-emerald-300 hover:underline"
+                            >
+                              Buscar PDF
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedSuggestedIdx(
+                        selectedSuggestedIdx.length === suggestedBooks.length
+                          ? []
+                          : suggestedBooks.map((_, i) => i)
+                      )
+                    }
+                    className="text-xs text-cyan-300 hover:underline"
+                  >
+                    {selectedSuggestedIdx.length === suggestedBooks.length
+                      ? 'Desmarcar todos'
+                      : 'Selecionar todos'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddSelectedSuggestions}
+                    disabled={addingSuggested || selectedSuggestedIdx.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Adicionar Selecionados ({selectedSuggestedIdx.length})
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Book List */}
           <div className="lg:col-span-5 space-y-3">
@@ -566,6 +739,7 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
               </div>
             )}
           </div>
+        </div>
         </div>
       )}
 

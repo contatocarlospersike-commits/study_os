@@ -58,21 +58,53 @@ export interface GraphData {
   }>;
 }
 
+export interface SuggestedBook {
+  title: string;
+  author: string;
+  reason: string;
+  availability_hint: string;
+  open_pdf_url: string;
+  pearson_likely: boolean;
+  estimated_pages: number;
+}
+
 export interface LearningProfile {
   user_id: string;
   preferred_block_min: number;
   visual_preference: number;
   frequent_questions: number;
   english_level: 'beginner' | 'intermediate' | 'advanced';
+  routine_json?: string;
   updated_at: string;
+}
+
+export interface RoutineConfig {
+  examGoal?: string;
+  preferredTime?: string;
+  focusBalance?: 'balanced' | 'catchup' | 'advance';
+}
+
+export interface ChecklistItem {
+  id: string;
+  title: string;
+  subject_name: string;
+  action_type: string;
+  duration_min: number;
+  reason: string;
+  completed: number;
+  scheduled_date: string;
+  created_at: string;
 }
 
 export interface ProfessorLesson {
   title: string;
+  hook30s: string;
+  structureBlocks: string[];
   analogy: string;
   coreExplanation: string;
   mermaidDiagram: string;
   checkpointQuestion: string;
+  audienceQuestion: string;
   englishTermTip: string;
 }
 
@@ -81,6 +113,17 @@ export interface ProfessorEvaluation {
   strengths: string[];
   gaps: string[];
   correctedExplanation: string;
+  nextStep: string;
+}
+
+export interface YoutubeEvaluationResult {
+  technicalScore: number;
+  creatorScore: number;
+  strengths: string[];
+  gaps: string[];
+  correctedExplanation: string;
+  hookFeedback: string;
+  communicationFeedback: string;
   nextStep: string;
 }
 
@@ -96,6 +139,7 @@ export interface DailyPlanResponse {
     title: string;
     reason: string;
   }>;
+  checklist?: ChecklistItem[];
 }
 
 export interface TriageResult {

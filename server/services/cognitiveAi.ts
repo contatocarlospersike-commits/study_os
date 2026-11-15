@@ -193,13 +193,77 @@ export async function generateSelectiveReadingPlan(
   return res.text || '';
 }
 
+export interface SuggestedBook {
+  title: string;
+  author: string;
+  reason: string;
+  availability_hint: string;
+  open_pdf_url: string;
+  pearson_likely: boolean;
+  estimated_pages: number;
+}
+
+export async function suggestBooksForSubject(
+  subjectName: string,
+  subjectContext: string
+): Promise<SuggestedBook[]> {
+  const ai = getAi();
+  const res = await withRetry(() =>
+    ai.models.generateContent({
+      model: MODEL,
+      contents: `Matéria: ${subjectName}\n\nMateriais, conceitos e notas do aluno:\n${subjectContext.slice(0, 5000)}`,
+      config: {
+        systemInstruction:
+          'Você é um curador bibliográfico universitário. Com base nos materiais da matéria, recomende NO MÁXIMO 3 livros essenciais (clássicos de referência da faculdade ou acesso aberto). Nunca retorne mais de 3 livros. Para open_pdf_url, gere uma URL válida de busca legal em repositórios abertos (ex: https://openstax.org/subjects, https://books.scielo.org/, https://doabooks.org/ ou https://arxiv.org/search/?query=...) ou deixe uma busca do Google Acadêmico/DOAB codificada. Responda em Português PT-BR.',
+        temperature: 0.2,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            books: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  author: { type: Type.STRING },
+                  reason: { type: Type.STRING },
+                  availability_hint: { type: Type.STRING },
+                  open_pdf_url: { type: Type.STRING },
+                  pearson_likely: { type: Type.BOOLEAN },
+                  estimated_pages: { type: Type.INTEGER },
+                },
+                required: [
+                  'title',
+                  'author',
+                  'reason',
+                  'availability_hint',
+                  'open_pdf_url',
+                  'pearson_likely',
+                  'estimated_pages',
+                ],
+              },
+            },
+          },
+          required: ['books'],
+        },
+      },
+    })
+  );
+  const parsed = JSON.parse(res.text || '{"books":[]}') as { books: SuggestedBook[] };
+  return (parsed.books || []).slice(0, 3);
+}
+
 export interface ProfessorLesson {
-  topic: string;
-  hook: string;
-  visual_analogy: string;
-  mermaid_diagram: string;
-  practical_example: string;
-  exam_trap: string;
+  title: string;
+  hook30s: string;
+  structureBlocks: string[];
+  analogy: string;
+  coreExplanation: string;
+  mermaidDiagram: string;
+  checkpointQuestion: string;
+  audienceQuestion: string;
+  englishTermTip: string;
 }
 
 export async function generateProfessorLesson(
@@ -214,20 +278,33 @@ export async function generateProfessorLesson(
       contents: `Matéria: ${subjectName}\nTema da aula: ${topic}\nContexto/Notas do aluno:\n${notesContext.slice(0, 4000)}`,
       config: {
         systemInstruction:
-          'Você é o arquiteto do "Modo Carlos Professor" (Técnica Feynman + Dual Coding). Transforme o tema técnico em um roteiro de mini-aula em Português PT-BR para o aluno ensinar em voz alta ou gravar conteúdo: gancho real, analogia visual, diagrama Mermaid válido, exemplo prático e pegadinha clássica de prova.',
+          'Você é o co-piloto do "Modo Carlos Professor & Creator" (Técnica Feynman + YouTube Storytelling). NÃO entregue um texto pronto para ler no teleprompter — entregue um ESQUELETO estratégico em Português PT-BR para o aluno estruturar a aula com suas próprias palavras (máxima fixação) e gravar para o YouTube: título forte, gancho de 30s, 3-4 blocos lógicos de estrutura, analogia visual, resumo-guia, diagrama Mermaid válido, pergunta de checkpoint Feynman e pergunta de engajamento para comentários.',
         temperature: 0.25,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            topic: { type: Type.STRING },
-            hook: { type: Type.STRING },
-            visual_analogy: { type: Type.STRING },
-            mermaid_diagram: { type: Type.STRING },
-            practical_example: { type: Type.STRING },
-            exam_trap: { type: Type.STRING },
+            title: { type: Type.STRING },
+            hook30s: { type: Type.STRING },
+            structureBlocks: { type: Type.ARRAY, items: { type: Type.STRING } },
+            analogy: { type: Type.STRING },
+            coreExplanation: { type: Type.STRING },
+            mermaidDiagram: { type: Type.STRING },
+            checkpointQuestion: { type: Type.STRING },
+            audienceQuestion: { type: Type.STRING },
+            englishTermTip: { type: Type.STRING },
           },
-          required: ['topic', 'hook', 'visual_analogy', 'mermaid_diagram', 'practical_example', 'exam_trap'],
+          required: [
+            'title',
+            'hook30s',
+            'structureBlocks',
+            'analogy',
+            'coreExplanation',
+            'mermaidDiagram',
+            'checkpointQuestion',
+            'audienceQuestion',
+            'englishTermTip',
+          ],
         },
       },
     })
@@ -238,7 +315,13 @@ export async function generateProfessorLesson(
 export async function evaluateProfessorExplanation(
   topic: string,
   userExplanation: string
-): Promise<{ clarity_score: number; strengths: string[]; gaps_to_fix: string[]; refined_summary: string }> {
+): Promise<{
+  score: number;
+  strengths: string[];
+  gaps: string[];
+  correctedExplanation: string;
+  nextStep: string;
+}> {
   const ai = getAi();
   const res = await withRetry(() =>
     ai.models.generateContent({
@@ -246,28 +329,118 @@ export async function evaluateProfessorExplanation(
       contents: `Tema: ${topic}\nExplicação do aluno (Técnica Feynman):\n${userExplanation}`,
       config: {
         systemInstruction:
-          'Avalie a explicação do aluno aplicando a Técnica Feynman. Dê uma nota de 0 a 100 em clareza/precisão, liste pontos fortes, aponte exatamente onde ele "enrolou" ou deixou lacuna técnica (gaps_to_fix) e dê uma síntese refinada em Português PT-BR.',
+          'Avalie a explicação do aluno aplicando a Técnica Feynman. Dê uma nota de 0 a 100 em clareza/precisão, liste pontos fortes, aponte lacunas técnicas (gaps), dê uma explicação lapidada e o próximo passo prático em Português PT-BR.',
         temperature: 0.15,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            clarity_score: { type: Type.INTEGER },
+            score: { type: Type.INTEGER },
             strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
-            gaps_to_fix: { type: Type.ARRAY, items: { type: Type.STRING } },
-            refined_summary: { type: Type.STRING },
+            gaps: { type: Type.ARRAY, items: { type: Type.STRING } },
+            correctedExplanation: { type: Type.STRING },
+            nextStep: { type: Type.STRING },
           },
-          required: ['clarity_score', 'strengths', 'gaps_to_fix', 'refined_summary'],
+          required: ['score', 'strengths', 'gaps', 'correctedExplanation', 'nextStep'],
         },
       },
     })
   );
   return JSON.parse(res.text || '{}') as {
-    clarity_score: number;
+    score: number;
     strengths: string[];
-    gaps_to_fix: string[];
-    refined_summary: string;
+    gaps: string[];
+    correctedExplanation: string;
+    nextStep: string;
   };
+}
+
+export interface YoutubeEvaluationResult {
+  technicalScore: number;
+  creatorScore: number;
+  strengths: string[];
+  gaps: string[];
+  correctedExplanation: string;
+  hookFeedback: string;
+  communicationFeedback: string;
+  nextStep: string;
+}
+
+export async function evaluateYoutubeLesson(input: {
+  subjectName: string;
+  topic: string;
+  youtubeUrl?: string;
+  transcriptFallback?: string;
+}): Promise<YoutubeEvaluationResult> {
+  const ai = getAi();
+  const promptText = `Matéria: ${input.subjectName}\nTema da aula: ${input.topic}\n${
+    input.transcriptFallback
+      ? `Transcrição / Notas do vídeo:\n${input.transcriptFallback.slice(0, 8000)}`
+      : 'Analise diretamente o vídeo do YouTube enviado.'
+  }`;
+
+  const parts: Array<Record<string, unknown>> = [];
+  if (input.youtubeUrl && input.youtubeUrl.trim()) {
+    parts.push({ fileData: { fileUri: input.youtubeUrl.trim() } });
+  }
+  parts.push({ text: promptText });
+
+  const runEval = async (useVideoFile: boolean) => {
+    const contentParts = useVideoFile
+      ? parts
+      : [
+          {
+            text: `${promptText}\nURL informada: ${input.youtubeUrl || 'N/A'}\n(Avalie com base na transcrição/resumo fornecido pelo aluno.)`,
+          },
+        ];
+
+    return ai.models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: contentParts as never }],
+      config: {
+        systemInstruction:
+          'Você é mentor duplo do Carlos: (1) Professor Universitário rigoroso em retenção e precisão técnica; (2) Diretor de Canal Educacional no YouTube. Avalie a aula em Português PT-BR dando technicalScore (0-100), creatorScore (0-100), pontos fortes, lacunas técnicas, explicação corrigida, análise do gancho inicial (hookFeedback), análise de comunicação/ritmo/didática (communicationFeedback) e próximo passo.',
+        temperature: 0.2,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            technicalScore: { type: Type.INTEGER },
+            creatorScore: { type: Type.INTEGER },
+            strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+            gaps: { type: Type.ARRAY, items: { type: Type.STRING } },
+            correctedExplanation: { type: Type.STRING },
+            hookFeedback: { type: Type.STRING },
+            communicationFeedback: { type: Type.STRING },
+            nextStep: { type: Type.STRING },
+          },
+          required: [
+            'technicalScore',
+            'creatorScore',
+            'strengths',
+            'gaps',
+            'correctedExplanation',
+            'hookFeedback',
+            'communicationFeedback',
+            'nextStep',
+          ],
+        },
+      },
+    });
+  };
+
+  try {
+    const res = await withRetry(() => runEval(Boolean(input.youtubeUrl?.trim())));
+    return JSON.parse(res.text || '{}') as YoutubeEvaluationResult;
+  } catch (err) {
+    if (input.transcriptFallback?.trim()) {
+      const res = await withRetry(() => runEval(false));
+      return JSON.parse(res.text || '{}') as YoutubeEvaluationResult;
+    }
+    throw new Error(
+      `Não foi possível acessar esse vídeo do YouTube diretamente (${(err as Error).message}). Se o vídeo for privado/não-listado, cole a transcrição no campo opcional abaixo.`
+    );
+  }
 }
 
 export async function generateDailyStudyPlan(input: {
@@ -276,15 +449,22 @@ export async function generateDailyStudyPlan(input: {
   pendingRecoveries: number;
   subjects: Array<{ name: string; due_count: number }>;
   preferredBlockMin: number;
+  routine?: {
+    examGoal?: string;
+    preferredTime?: string;
+    focusBalance?: 'balanced' | 'catchup' | 'advance';
+  };
 }): Promise<{
-  strategy_note: string;
+  availableMinutes: number;
+  recommendedBlockMin: number;
+  summary: string;
   blocks: Array<{
     order: number;
-    duration_min: number;
-    device: 'mobile' | 'desktop';
-    technique: string;
-    subject: string;
-    action: string;
+    durationMin: number;
+    actionType: 'review' | 'quiz' | 'feynman' | 'reading' | 'rag_chat';
+    subjectName: string;
+    title: string;
+    reason: string;
   }>;
 }> {
   const ai = getAi();
@@ -294,43 +474,38 @@ export async function generateDailyStudyPlan(input: {
       contents: JSON.stringify(input),
       config: {
         systemInstruction:
-          'Monte um Plano de Estudo Diário realista em Português PT-BR usando ciência cognitiva (Spaced Repetition nos blocos curtos/mobile, Recuperação de pontos fracos, Interleaving e Modo Professor nos blocos longos/desktop) respeitando exatamente availableMinutes.',
+          'Monte um Plano de Estudo Diário equilibrado em Português PT-BR respeitando availableMinutes. Regra de equilíbrio: se focusBalance for "balanced" (padrão), dedique cerca de 30% do tempo para revisões SM-2/recuperações e 70% para AVANÇO PLANEJADO de matéria nova (leitura seletiva, aula Feynman/YouTube ou conceitos novos), considerando examGoal e preferredTime. Retorne actionType entre: review, quiz, feynman, reading, rag_chat.',
         temperature: 0.2,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            strategy_note: { type: Type.STRING },
+            availableMinutes: { type: Type.INTEGER },
+            recommendedBlockMin: { type: Type.INTEGER },
+            summary: { type: Type.STRING },
             blocks: {
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
                 properties: {
                   order: { type: Type.INTEGER },
-                  duration_min: { type: Type.INTEGER },
-                  device: { type: Type.STRING, enum: ['mobile', 'desktop'] },
-                  technique: { type: Type.STRING },
-                  subject: { type: Type.STRING },
-                  action: { type: Type.STRING },
+                  durationMin: { type: Type.INTEGER },
+                  actionType: {
+                    type: Type.STRING,
+                    enum: ['review', 'quiz', 'feynman', 'reading', 'rag_chat'],
+                  },
+                  subjectName: { type: Type.STRING },
+                  title: { type: Type.STRING },
+                  reason: { type: Type.STRING },
                 },
-                required: ['order', 'duration_min', 'device', 'technique', 'subject', 'action'],
+                required: ['order', 'durationMin', 'actionType', 'subjectName', 'title', 'reason'],
               },
             },
           },
-          required: ['strategy_note', 'blocks'],
+          required: ['availableMinutes', 'recommendedBlockMin', 'summary', 'blocks'],
         },
       },
     })
   );
-  return JSON.parse(res.text || '{"strategy_note":"","blocks":[]}') as {
-    strategy_note: string;
-    blocks: Array<{
-      order: number;
-      duration_min: number;
-      device: 'mobile' | 'desktop';
-      technique: string;
-      subject: string;
-      action: string;
-    }>;
-  };
+  return JSON.parse(res.text || '{"availableMinutes":60,"recommendedBlockMin":25,"summary":"","blocks":[]}');
 }

@@ -49,6 +49,7 @@ export function Dashboard({
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(subjects[0]?.id || '');
   const [subtopic, setSubtopic] = useState('Geral');
   const [mode, setMode] = useState<'deep_work' | 'feynman' | 'interleaving'>('deep_work');
+  const [timerMode, setTimerMode] = useState<'free' | 'pomodoro25' | 'deep50'>('free');
   const [starting, setStarting] = useState(false);
 
   // Post-session Cognitive Check-in
@@ -191,9 +192,23 @@ export function Dashboard({
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-cyan-500/40 bg-cyan-950/30 px-4 py-3">
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-cyan-400" />
-                <span className="font-mono text-lg font-bold text-cyan-300">
-                  {formatDuration(elapsedSec)}
-                </span>
+                {timerMode === 'free' ? (
+                  <span className="font-mono text-lg font-bold text-cyan-300">
+                    {formatDuration(elapsedSec)}
+                  </span>
+                ) : (
+                  (() => {
+                    const target = timerMode === 'pomodoro25' ? 25 * 60 : 50 * 60;
+                    const remaining = Math.max(0, target - elapsedSec);
+                    return (
+                      <span className={`font-mono text-lg font-bold ${remaining === 0 ? 'text-emerald-300' : 'text-cyan-300'}`}>
+                        {remaining === 0
+                          ? `Meta atingida! Pausa ${timerMode === 'pomodoro25' ? '5m' : '10m'}`
+                          : formatDuration(remaining)}
+                      </span>
+                    );
+                  })()
+                )}
               </div>
               <span className="text-xs text-zinc-300">
                 {activeSession.subtopic} ({activeSession.mode.replace('_', ' ')})
@@ -209,7 +224,17 @@ export function Dashboard({
               </button>
             </div>
           ) : (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <select
+                aria-label="Modo do Cronômetro"
+                value={timerMode}
+                onChange={(e) => setTimerMode(e.target.value as 'free' | 'pomodoro25' | 'deep50')}
+                className="min-h-[44px] rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs text-cyan-300"
+              >
+                <option value="free">Cronômetro Livre</option>
+                <option value="pomodoro25">Pomodoro (25m / 5m)</option>
+                <option value="deep50">Bloco Longo (50m / 10m)</option>
+              </select>
               <select
                 aria-label="Matéria de Estudo"
                 value={effectiveSubjectId}

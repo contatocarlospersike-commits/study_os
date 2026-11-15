@@ -5,6 +5,7 @@ import type {
   Book,
   ChatMessage,
   ChatThread,
+  ChecklistItem,
   Concept,
   DailyPlanResponse,
   Flashcard,
@@ -19,10 +20,13 @@ import type {
   QuizDetail,
   QuizSummary,
   RecoveryPlan,
+  RoutineConfig,
   StudySession,
   Subject,
   SubjectDetail,
+  SuggestedBook,
   TriageResult,
+  YoutubeEvaluationResult,
 } from '../types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -151,6 +155,11 @@ export const api = {
     text_content?: string;
     subject_id?: string | null;
   }) => request<TriageResult>('/api/library/inbox/triage', { method: 'POST', body: JSON.stringify(body) }),
+  suggestBooksForSubject: (subjectId: string) =>
+    request<{ subjectName: string; books: SuggestedBook[] }>('/api/library/suggest-books', {
+      method: 'POST',
+      body: JSON.stringify({ subject_id: subjectId }),
+    }),
 
   // Cognitive: Graph, AI Links, Professor, Planner, Profile & Check-ins
   getGraph: () => request<GraphData>('/api/cognitive/graph'),
@@ -173,11 +182,26 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  generateDailyPlan: (body: { available_minutes: number }) =>
+  evaluateYoutubeLesson: (body: {
+    subject_id?: string;
+    topic: string;
+    youtube_url?: string;
+    transcript_fallback?: string;
+  }) =>
+    request<YoutubeEvaluationResult>('/api/cognitive/professor/evaluate-video', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  generateDailyPlan: (body: { available_minutes: number; routine?: RoutineConfig }) =>
     request<DailyPlanResponse>('/api/cognitive/planner/today', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  getChecklist: () => request<ChecklistItem[]>('/api/cognitive/checklist'),
+  toggleChecklistItem: (id: string) =>
+    request<ChecklistItem>(`/api/cognitive/checklist/${id}/toggle`, { method: 'POST' }),
+  deleteChecklistItem: (id: string) =>
+    request<{ ok: boolean }>(`/api/cognitive/checklist/${id}`, { method: 'DELETE' }),
   getLearningProfile: async () => {
     const res = await request<{ profile: LearningProfile }>('/api/cognitive/profile');
     return res.profile;

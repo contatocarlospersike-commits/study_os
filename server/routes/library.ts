@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { execute, isPostgresDb, queryAll, queryOne } from '../db.js';
 import { embedTexts } from '../services/rag.js';
-import { generateSelectiveReadingPlan, triageInboxMaterial } from '../services/cognitiveAi.js';
+import { generateSelectiveReadingPlan, suggestBooksForSubject, triageInboxMaterial } from '../services/cognitiveAi.js';
 
 export const libraryRouter = Router();
 
@@ -52,6 +52,42 @@ const OPEN_ACCESS_CATALOG = [
 
 libraryRouter.get('/open-catalog', (_req, res) => {
   res.json(OPEN_ACCESS_CATALOG);
+});
+
+libraryRouter.post('/suggest-books', async (req, res) => {
+  const { subject_id } = req.body;
+  if (!subject_id) {
+    res.status(400).json({ error: 'subject_id é obrigatório.' });
+    return;
+  }
+
+  const subject = await queryOne<{ id: string; name: string; description: string; notes_markdown: string }>(
+    `SELECT id, name, description, notes_markdown FROM subjects WHERE id = ? AND user_id = ?`,
+    [subject_id, req.userId]
+  );
+  if (!subject) {
+    res.status(404).json({ error: 'Matéria não encontrada.' });
+    return;
+  }
+
+  const concepts = await queryAll<{ title: string; summary: string }>(
+    `SELECT title, summary FROM concepts WHERE subject_id = ? AND user_id = ? LIMIT 15`,
+    [subject_id, req.userId]
+  );
+  const materials = await queryAll<{ title: string }>(
+    `SELECT title FROM materials WHERE subject_id = ? AND user_id = ? LIMIT 15`,
+    [subject_id, req.userId]
+  );
+
+  const context = [
+    `Descrição: ${subject.description}`,
+    `Materiais enviados: ${materials.map((m) => m.title).join(', ') || 'nenhum ainda'}`,
+    `Conceitos: ${concepts.map((c) => `${c.title}: ${c.summary}`).join('\n')}`,
+    `Notas: ${subject.notes_markdown}`,
+  ].join('\n\n');
+
+  const books = await suggestBooksForSubject(subject.name, context);
+  res.json({ subjectName: subject.name, books: books.slice(0, 3) });
 });
 
 libraryRouter.get('/books', async (req, res) => {
