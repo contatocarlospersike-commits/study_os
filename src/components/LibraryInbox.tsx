@@ -52,6 +52,9 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
   const [examGoal, setExamGoal] = useState('');
   const [tocText, setTocText] = useState('');
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [savingToWorkspace, setSavingToWorkspace] = useState(false);
+  const [generatingBookCards, setGeneratingBookCards] = useState(false);
+  const [showLinkPicker, setShowLinkPicker] = useState(false);
 
   // Inbox "Jogar o Grosso"
   const [inboxTitle, setInboxTitle] = useState('');
@@ -125,6 +128,70 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
       onNotify('Livro removido', 'Registro removido da biblioteca.');
     } catch (err) {
       onNotify('Erro', (err as Error).message);
+    }
+  };
+
+  const handleSendBookToWorkspace = async () => {
+    if (!selectedBook) return;
+    const targetSubjectId = selectedBook.subject_id || subjects[0]?.id;
+    if (!targetSubjectId) {
+      onNotify('Crie um espaço primeiro', 'Crie uma Matéria ou Projeto no Workspace antes de exportar o fichamento.');
+      return;
+    }
+    setSavingToWorkspace(true);
+    try {
+      const content = [
+        `## Resumo Pessoal\n${selectedBook.summary_markdown || '_Sem resumo ainda._'}`,
+        `## Insights & Conexões\n${selectedBook.insights_markdown || '_Sem insights ainda._'}`,
+        selectedBook.selective_plan_markdown
+          ? `## Roteiro de Leitura Seletiva\n${selectedBook.selective_plan_markdown}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
+      await api.createNote({
+        subject_id: targetSubjectId,
+        title: `Fichamento: ${selectedBook.title}`,
+        icon: '📖',
+        page_type: 'note',
+        content_markdown: content,
+      });
+      onDataChanged();
+      onNotify('Nota criada no Workspace!', `Fichamento de "${selectedBook.title}" salvo com suas conexões.`);
+    } catch (err) {
+      onNotify('Erro ao criar nota', (err as Error).message);
+    } finally {
+      setSavingToWorkspace(false);
+    }
+  };
+
+  const handleGenerateCardsFromBook = async () => {
+    if (!selectedBook) return;
+    const combined = [selectedBook.summary_markdown, selectedBook.insights_markdown, selectedBook.selective_plan_markdown]
+      .filter(Boolean)
+      .join('\n\n');
+    if (!combined.trim()) {
+      onNotify('Escreva notas primeiro', 'Adicione seu resumo ou insights do livro para gerar flashcards e quiz.');
+      return;
+    }
+    setGeneratingBookCards(true);
+    try {
+      const res = await api.triageInbox({
+        title: `Livro: ${selectedBook.title}`,
+        file_type: 'text',
+        text_content: combined,
+        subject_id: selectedBook.subject_id || subjects[0]?.id || null,
+      });
+      onDataChanged();
+      onNotify(
+        'Estudo ativo criado!',
+        `${res.createdFlashcards} flashcards e 1 quiz gerados a partir das suas notas do livro.`
+      );
+    } catch (err) {
+      onNotify('Erro ao gerar flashcards', (err as Error).message);
+    } finally {
+      setGeneratingBookCards(false);
     }
   };
 
@@ -418,8 +485,25 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
                   </div>
                 </div>
 
-                {/* Status & Page Progress */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                {/* Status, Subject Link & Page Progress */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Matéria / Projeto</label>
+                    <select
+                      value={selectedBook.subject_id || ''}
+                      onChange={(e) =>
+                        handleUpdateBook(selectedBook.id, { subject_id: e.target.value || null })
+                      }
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-100"
+                    >
+                      <option value="">Sem vínculo</option>
+                      {subjects.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="text-[11px] text-slate-400 block mb-1">Status de Leitura</label>
                     <select
@@ -461,13 +545,15 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
                   </div>
                 </div>
 
-                {/* Summary & Insights */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Summary & Insights / Connections */}
+                <div className="space-y-3">
                   <div>
-                    <label className="text-xs font-medium text-slate-300 block mb-1.5">Resumo Pessoal</label>
+                    <label className="text-xs font-medium text-slate-300 block mb-1.5">
+                      Fichamento & Resumo do Livro
+                    </label>
                     <textarea
-                      rows={4}
-                      placeholder="Ideia central do livro..."
+                      rows={5}
+                      placeholder="Anote aqui os conceitos-chave, citações e sua síntese dos capítulos..."
                       value={selectedBook.summary_markdown}
                       onChange={(e) =>
                         setBooks((prev) =>
@@ -477,16 +563,49 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
                         )
                       }
                       onBlur={(e) => handleUpdateBook(selectedBook.id, { summary_markdown: e.target.value })}
-                      className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200"
+                      className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs leading-relaxed text-slate-200 focus:border-cyan-500/50 focus:outline-none"
                     />
                   </div>
+
                   <div>
-                    <label className="text-xs font-medium text-slate-300 block mb-1.5">
-                      Insights & Conexões [[Matéria]]
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-medium text-slate-300">
+                        Insights & Conexões <code className="text-indigo-300">[[Matéria ou Nota]]</code>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowLinkPicker((v) => !v)}
+                        className="text-[11px] px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25"
+                      >
+                        + Conectar [[Matéria]]
+                      </button>
+                    </div>
+                    {showLinkPicker && subjects.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1.5 p-2 rounded-lg bg-slate-950 border border-slate-800">
+                        {subjects.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              const next = `${selectedBook.insights_markdown ? `${selectedBook.insights_markdown}\n` : ''}- Conectado a [[${s.name}]]: `;
+                              setBooks((prev) =>
+                                prev.map((b) =>
+                                  b.id === selectedBook.id ? { ...b, insights_markdown: next } : b
+                                )
+                              );
+                              void handleUpdateBook(selectedBook.id, { insights_markdown: next });
+                              setShowLinkPicker(false);
+                            }}
+                            className="text-[11px] px-2 py-1 rounded bg-slate-900 text-indigo-300 hover:bg-indigo-500/20"
+                          >
+                            {s.icon || '📚'} [[{s.name}]]
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <textarea
-                      rows={4}
-                      placeholder="Principais aprendizados aplicáveis na faculdade..."
+                      rows={5}
+                      placeholder="Como isso se conecta com suas matérias, projetos ou outras notas? Use [[Nome]]..."
                       value={selectedBook.insights_markdown}
                       onChange={(e) =>
                         setBooks((prev) =>
@@ -496,8 +615,30 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
                         )
                       }
                       onBlur={(e) => handleUpdateBook(selectedBook.id, { insights_markdown: e.target.value })}
-                      className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200"
+                      className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs leading-relaxed text-slate-200 focus:border-cyan-500/50 focus:outline-none"
                     />
+                  </div>
+
+                  {/* Action Bar: Save to Workspace + Generate Flashcards/Quiz */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSendBookToWorkspace}
+                      disabled={savingToWorkspace}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50"
+                    >
+                      {savingToWorkspace ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookOpen className="w-3.5 h-3.5" />}
+                      Criar Nota no Workspace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateCardsFromBook}
+                      disabled={generatingBookCards}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 disabled:opacity-50"
+                    >
+                      {generatingBookCards ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      Gerar Flashcards & Quiz do Livro
+                    </button>
                   </div>
                 </div>
 
