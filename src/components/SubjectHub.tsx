@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../api/client';
+import { SubjectStudyPlan } from './SubjectStudyPlan';
 import type {
   GraphData,
   Material,
@@ -40,7 +41,7 @@ import type {
 } from '../types';
 
 interface SubjectHubProps {
-  onNavigate: (view: NavView) => void;
+  onNavigate: (view: NavView, opts?: { subjectId?: string; quizId?: string }) => void;
   onStartStudy?: (subjectId: string) => void;
 }
 
@@ -220,6 +221,7 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
   const [materials, setMaterials] = useState<Material[]>([]);
 
   const [viewMode, setViewMode] = useState<'gallery' | 'workspace'>('gallery');
+  const [workspaceTab, setWorkspaceTab] = useState<'notes' | 'plan'>('notes');
   const [kindFilter, setKindFilter] = useState<'all' | 'subject' | 'project'>('all');
   const [treeSearch, setTreeSearch] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -1039,7 +1041,45 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
             </div>
           )}
 
-          {/* Split Body */}
+          {/* Workspace Sub-tabs: Notas & Materiais vs Estudo Ativo */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 bg-zinc-900/50 px-5 py-2">
+            <div className="inline-flex rounded-xl border border-zinc-800 bg-zinc-950/70 p-0.5">
+              <button
+                type="button"
+                onClick={() => setWorkspaceTab('notes')}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  workspaceTab === 'notes' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                Notas & Materiais
+              </button>
+              <button
+                type="button"
+                onClick={() => setWorkspaceTab('plan')}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  workspaceTab === 'plan'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-indigo-300'
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Estudo Ativo (Plano & Aulas)
+              </button>
+            </div>
+            <span className="text-[11px] text-zinc-500">
+              {materials.length} materiais indexados • {selectedSubject.notes?.length || 0} páginas
+            </span>
+          </div>
+
+          {workspaceTab === 'plan' ? (
+            <SubjectStudyPlan
+              subject={selectedSubject}
+              onOpenQuiz={(quizId) => onNavigate('practice', { quizId })}
+              onRefresh={loadSubjects}
+            />
+          ) : (
+          /* Split Body */
           <div className="flex min-h-[560px] flex-col md:flex-row">
             {/* Left Sidebar Tree */}
             {!sidebarCollapsed && (
@@ -1466,6 +1506,7 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
               )}
             </main>
           </div>
+          )}
         </div>
       )}
 

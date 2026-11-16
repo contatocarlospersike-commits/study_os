@@ -353,6 +353,38 @@ export async function initDatabase(): Promise<void> {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS study_plans (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+      exam_date TEXT NOT NULL DEFAULT '',
+      days_json TEXT NOT NULL DEFAULT '[]',
+      slots_json TEXT NOT NULL DEFAULT '{}',
+      strategy_summary TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS study_blocks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      plan_id TEXT NOT NULL REFERENCES study_plans(id) ON DELETE CASCADE,
+      subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+      week_number INTEGER NOT NULL DEFAULT 1,
+      day_label TEXT NOT NULL,
+      shift_label TEXT NOT NULL,
+      duration_min INTEGER NOT NULL DEFAULT 30,
+      topic TEXT NOT NULL,
+      technique TEXT NOT NULL DEFAULT 'Feynman + Active Recall',
+      objective TEXT NOT NULL DEFAULT '',
+      lesson_markdown TEXT NOT NULL DEFAULT '',
+      quiz_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Safe migrations for existing databases

@@ -13,6 +13,7 @@ import { chatRouter, materialsRouter } from './routes/rag.js';
 import { libraryRouter } from './routes/library.js';
 import { cognitiveRouter } from './routes/cognitive.js';
 import { notesRouter } from './routes/notes.js';
+import { studyPlansRouter } from './routes/studyPlans.js';
 
 export function createApp() {
   const app = express();
@@ -59,6 +60,7 @@ export function createApp() {
   app.use('/api/library', libraryRouter);
   app.use('/api/cognitive', cognitiveRouter);
   app.use('/api/notes', notesRouter);
+  app.use('/api/study-plans', studyPlansRouter);
 
   app.use('/api', (err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error('[Study OS API Error]', err);

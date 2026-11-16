@@ -23,6 +23,8 @@ import type {
   QuizSummary,
   RecoveryPlan,
   RoutineConfig,
+  StudyBlock,
+  StudyPlan,
   StudySession,
   Subject,
   SubjectDetail,
@@ -305,4 +307,24 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  getStudyPlan: (subjectId: string) =>
+    request<{ plan: StudyPlan | null; blocks: StudyBlock[] }>(`/api/study-plans/subject/${subjectId}`),
+  generateStudyPlan: (body: {
+    subject_id: string;
+    days: string[];
+    slots: { morning: number; afternoon: number; night: number };
+    exam_date?: string;
+  }) =>
+    request<{ plan: StudyPlan; blocks: StudyBlock[] }>('/api/study-plans/generate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  prepareStudyBlock: (blockId: string, force = false) =>
+    request<{ block: StudyBlock; createdFlashcards: number; quizId: string | null }>(
+      `/api/study-plans/blocks/${blockId}/prepare`,
+      { method: 'POST', body: JSON.stringify({ force }) }
+    ),
+  toggleStudyBlockComplete: (blockId: string) =>
+    request<StudyBlock>(`/api/study-plans/blocks/${blockId}/complete`, { method: 'POST' }),
 };

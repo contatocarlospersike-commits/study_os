@@ -435,3 +435,33 @@ export interface AnalyticsData {
     d30_plus: number;
   };
 }
+
+export interface StudyPlan {
+  id: string;
+  subject_id: string;
+  exam_date: string;
+  days: string[];
+  slots: { morning: number; afternoon: number; night: number };
+  strategy_summary: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StudyBlock {
+  id: string;
+  plan_id: string;
+  subject_id: string;
+  week_number: number;
+  day_label: string;
+  shift_label: string;
+  duration_min: number;
+  topic: string;
+  technique: string;
+  objective: string;
+  lesson_markdown: string;
+  quiz_id: string | null;
+  status: 'pending' | 'ready' | 'completed';
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
