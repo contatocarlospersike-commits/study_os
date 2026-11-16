@@ -9,11 +9,10 @@ import {
   Trash2,
   CheckCircle2,
   Clock,
-  BookMarked,
   Loader2,
 } from 'lucide-react';
 import { api } from '../api/client';
-import type { Book, OpenCatalogItem, Subject, SuggestedBook, TriageResult } from '../types';
+import type { Book, Subject, TriageResult } from '../types';
 
 interface LibraryInboxProps {
   subjects: Subject[];
@@ -35,13 +34,11 @@ const SOURCE_LABELS: Record<Book['source_type'], string> = {
 };
 
 export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChanged, onNotify }) => {
-  const [subTab, setSubTab] = useState<'books' | 'catalog' | 'inbox'>('books');
+  const [subTab, setSubTab] = useState<'books' | 'inbox'>('books');
   const [books, setBooks] = useState<Book[]>([]);
-  const [catalog, setCatalog] = useState<OpenCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [readerModal, setReaderModal] = useState<{ title: string; url: string; isLocalPdf?: boolean } | null>(null);
 
   // Add book form
   const [newTitle, setNewTitle] = useState('');
@@ -50,13 +47,6 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
   const [newUrl, setNewUrl] = useState('');
   const [newTotalPages, setNewTotalPages] = useState(300);
   const [newSubjectId, setNewSubjectId] = useState<string>('');
-
-  // AI Book Suggestions (max 3 per subject)
-  const [suggestSubjectId, setSuggestSubjectId] = useState<string>(subjects[0]?.id || '');
-  const [suggestingBooks, setSuggestingBooks] = useState(false);
-  const [suggestedBooks, setSuggestedBooks] = useState<SuggestedBook[]>([]);
-  const [selectedSuggestedIdx, setSelectedSuggestedIdx] = useState<number[]>([]);
-  const [addingSuggested, setAddingSuggested] = useState(false);
 
   // Selective reading AI
   const [examGoal, setExamGoal] = useState('');
@@ -75,9 +65,8 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
   const loadData = async () => {
     setLoading(true);
     try {
-      const [b, c] = await Promise.all([api.getBooks(), api.getOpenCatalog()]);
+      const b = await api.getBooks();
       setBooks(b);
-      setCatalog(c);
       if (b.length > 0 && !selectedBookId) {
         setSelectedBookId(b[0].id);
       }
@@ -136,75 +125,6 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
       onNotify('Livro removido', 'Registro removido da biblioteca.');
     } catch (err) {
       onNotify('Erro', (err as Error).message);
-    }
-  };
-
-  const handleAddFromCatalog = async (item: OpenCatalogItem) => {
-    try {
-      const created = await api.createBook({
-        title: item.title,
-        author: item.author,
-        source_type: 'open_access',
-        external_url: item.external_url,
-        total_pages: item.total_pages,
-        summary_markdown: item.description,
-        status: 'to_read',
-      });
-      setBooks((prev) => [created, ...prev]);
-      setSelectedBookId(created.id);
-      setSubTab('books');
-      onNotify('Adicionado com 1 clique', `"${item.title}" salvo em Meus Livros.`);
-    } catch (err) {
-      onNotify('Erro', (err as Error).message);
-    }
-  };
-
-  const handleSuggestBooks = async () => {
-    const targetId = suggestSubjectId || subjects[0]?.id;
-    if (!targetId) return;
-    setSuggestingBooks(true);
-    setSuggestedBooks([]);
-    setSelectedSuggestedIdx([]);
-    try {
-      const res = await api.suggestBooksForSubject(targetId);
-      setSuggestedBooks(res.books.slice(0, 3));
-      setSelectedSuggestedIdx(res.books.slice(0, 3).map((_, i) => i));
-    } catch (err) {
-      onNotify('Erro ao sugerir livros', (err as Error).message);
-    } finally {
-      setSuggestingBooks(false);
-    }
-  };
-
-  const handleAddSelectedSuggestions = async () => {
-    const targetId = suggestSubjectId || subjects[0]?.id || null;
-    const chosen = selectedSuggestedIdx.map((i) => suggestedBooks[i]).filter(Boolean);
-    if (chosen.length === 0) return;
-    setAddingSuggested(true);
-    try {
-      const createdList: Book[] = [];
-      for (const s of chosen) {
-        const created = await api.createBook({
-          title: s.title,
-          author: s.author,
-          source_type: s.pearson_likely ? 'pearson' : 'open_access',
-          external_url: s.open_pdf_url,
-          total_pages: s.estimated_pages || 250,
-          subject_id: targetId,
-          summary_markdown: s.reason,
-          status: 'to_read',
-        });
-        createdList.push(created);
-      }
-      setBooks((prev) => [...createdList, ...prev]);
-      if (createdList[0]) setSelectedBookId(createdList[0].id);
-      setSuggestedBooks([]);
-      setSelectedSuggestedIdx([]);
-      onNotify('Livros aprovados!', `${createdList.length} livro(s) adicionados à estante.`);
-    } catch (err) {
-      onNotify('Erro ao adicionar', (err as Error).message);
-    } finally {
-      setAddingSuggested(false);
     }
   };
 
@@ -277,17 +197,16 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
         <div>
           <h2 className="text-xl font-semibold text-slate-100 flex items-center gap-2">
             <Library className="w-5 h-5 text-cyan-400" />
-            Biblioteca & Inbox Cognitivo
+            Biblioteca & Insights
           </h2>
           <p className="text-sm text-slate-400">
-            Controle leituras da Pearson/PDFs, baixe livros abertos e jogue materiais brutos para a IA organizar.
+            Organize seus livros, acompanhe páginas lidas, registre insights e gere planos de leitura seletiva.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
           {[
             { id: 'books', label: 'Meus Livros', icon: BookOpen },
-            { id: 'catalog', label: 'Catálogo Aberto', icon: BookMarked },
             { id: 'inbox', label: 'Jogar o Grosso (IA)', icon: FileUp },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -313,122 +232,6 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
       {/* SUBTAB 1: MEUS LIVROS */}
       {subTab === 'books' && (
         <div className="space-y-4">
-          {/* AI Curadoria (até 3 livros por matéria + link PDF aberto) */}
-          <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-slate-100 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-cyan-400" />
-                  Sugestão Inteligente de Livros (Máx. 3 por Matéria)
-                </div>
-                <p className="text-xs text-slate-400">
-                  A IA analisa os materiais da sua matéria, indica até 3 livros e traz links de busca legal para PDF aberto / Pearson.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={suggestSubjectId || subjects[0]?.id || ''}
-                  onChange={(e) => setSuggestSubjectId(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-100"
-                >
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleSuggestBooks}
-                  disabled={suggestingBooks || subjects.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500 text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
-                >
-                  {suggestingBooks ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-3.5 h-3.5" />
-                  )}
-                  Sugerir Livros
-                </button>
-              </div>
-            </div>
-
-            {suggestedBooks.length > 0 && (
-              <div className="pt-2 border-t border-slate-800 space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {suggestedBooks.map((sb, idx) => {
-                    const checked = selectedSuggestedIdx.includes(idx);
-                    return (
-                      <div
-                        key={idx}
-                        onClick={() =>
-                          setSelectedSuggestedIdx((prev) =>
-                            prev.includes(idx) ? prev.filter((x) => x !== idx) : [...prev, idx]
-                          )
-                        }
-                        className={`cursor-pointer p-3 rounded-xl border transition-all space-y-1.5 ${
-                          checked
-                            ? 'bg-cyan-950/30 border-cyan-500/50'
-                            : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="text-xs font-semibold text-slate-100">{sb.title}</div>
-                          <input type="checkbox" checked={checked} readOnly className="mt-0.5" />
-                        </div>
-                        <div className="text-[11px] text-slate-400">{sb.author}</div>
-                        <p className="text-[11px] text-slate-300 leading-relaxed">{sb.reason}</p>
-                        <div className="flex items-center justify-between pt-1">
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-cyan-300">
-                            {sb.pearson_likely ? 'Pearson / Acadêmico' : sb.availability_hint}
-                          </span>
-                          {sb.open_pdf_url && (
-                            <a
-                              href={sb.open_pdf_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 text-[11px] text-emerald-300 hover:underline"
-                            >
-                              Buscar PDF
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSelectedSuggestedIdx(
-                        selectedSuggestedIdx.length === suggestedBooks.length
-                          ? []
-                          : suggestedBooks.map((_, i) => i)
-                      )
-                    }
-                    className="text-xs text-cyan-300 hover:underline"
-                  >
-                    {selectedSuggestedIdx.length === suggestedBooks.length
-                      ? 'Desmarcar todos'
-                      : 'Selecionar todos'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddSelectedSuggestions}
-                    disabled={addingSuggested || selectedSuggestedIdx.length === 0}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Adicionar Selecionados ({selectedSuggestedIdx.length})
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Book List */}
           <div className="lg:col-span-5 space-y-3">
@@ -594,50 +397,16 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="cursor-pointer flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25">
-                      <FileUp className="w-3.5 h-3.5" />
-                      Ler PDF Local
-                      <input
-                        type="file"
-                        accept="application/pdf"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const blobUrl = URL.createObjectURL(file);
-                          setReaderModal({
-                            title: `${selectedBook.title} (${file.name})`,
-                            url: blobUrl,
-                            isLocalPdf: true,
-                          });
-                        }}
-                      />
-                    </label>
                     {selectedBook.external_url && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setReaderModal({
-                              title: selectedBook.title,
-                              url: selectedBook.external_url,
-                            })
-                          }
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25"
-                        >
-                          <BookOpen className="w-3.5 h-3.5" />
-                          Ler no Study OS
-                        </button>
-                        <a
-                          href={selectedBook.external_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:text-white"
-                          title="Abrir em nova aba"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      </>
+                      <a
+                        href={selectedBook.external_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:text-white"
+                      >
+                        Abrir Link
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                     )}
                     <button
                       onClick={() => handleDeleteBook(selectedBook.id)}
@@ -778,48 +547,7 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
         </div>
       )}
 
-      {/* SUBTAB 2: CATÁLOGO ABERTO */}
-      {subTab === 'catalog' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {catalog.map((item) => (
-            <div
-              key={item.id}
-              className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800 flex flex-col justify-between gap-4"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                    {item.category}
-                  </span>
-                  <span className="text-[11px] text-slate-400">{item.total_pages} pág.</span>
-                </div>
-                <h3 className="text-sm font-semibold text-slate-100 mt-2.5">{item.title}</h3>
-                <p className="text-xs text-slate-400 mt-0.5">{item.author}</p>
-                <p className="text-xs text-slate-300 mt-2 leading-relaxed">{item.description}</p>
-              </div>
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
-                <button
-                  onClick={() => handleAddFromCatalog(item)}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Adicionar à Estante
-                </button>
-                <a
-                  href={item.external_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-2.5 py-1.5 rounded-lg text-xs text-slate-300 border border-slate-700 hover:bg-slate-800"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* SUBTAB 3: INBOX JOGAR O GROSSO */}
+      {/* SUBTAB 2: INBOX JOGAR O GROSSO */}
       {subTab === 'inbox' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <form
@@ -935,47 +663,6 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
                 <p>3. O texto é fatiado com embeddings (`gemini-embedding-001`) para o Tutor IA.</p>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Embedded Book / PDF Reader Modal */}
-      {readerModal && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-sm">
-          <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <BookOpen className="h-4 w-4 shrink-0 text-cyan-400" />
-              <span className="truncate text-sm font-semibold text-white">{readerModal.title}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {!readerModal.isLocalPdf && (
-                <a
-                  href={readerModal.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200 hover:text-white"
-                >
-                  Abrir fora <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  if (readerModal.isLocalPdf) URL.revokeObjectURL(readerModal.url);
-                  setReaderModal(null);
-                }}
-                className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700"
-              >
-                Fechar Leitor
-              </button>
-            </div>
-          </div>
-          <div className="relative flex-1 bg-zinc-900">
-            <iframe
-              src={readerModal.url}
-              title={readerModal.title}
-              className="h-full w-full border-0"
-            />
           </div>
         </div>
       )}
