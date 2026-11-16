@@ -35,10 +35,49 @@ import type {
 
 const GET_CACHE = new Map<string, { data: unknown; ts: number }>();
 const IN_FLIGHT = new Map<string, Promise<unknown>>();
-const CACHE_TTL_MS = 15_000;
+const CACHE_TTL_MS = 60_000;
+const LS_PREFIX = 'studyos_api_cache:';
+
+function readLocalCache<T>(path: string): T | null {
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + path);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalCache(path: string, data: unknown) {
+  try {
+    localStorage.setItem(LS_PREFIX + path, JSON.stringify(data));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+function clearLocalCache() {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(LS_PREFIX)) keys.push(k);
+    }
+    keys.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // ignore
+  }
+}
+
+export function getCachedSync<T>(path: string): T | null {
+  const mem = GET_CACHE.get(path);
+  if (mem) return mem.data as T;
+  return readLocalCache<T>(path);
+}
 
 export function invalidateApiCache() {
   GET_CACHE.clear();
+  clearLocalCache();
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -55,6 +94,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   } else {
     GET_CACHE.clear();
+    clearLocalCache();
   }
 
   const exec = (async () => {
@@ -81,6 +121,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const json = (await res.json()) as T;
     if (method === 'GET') {
       GET_CACHE.set(path, { data: json, ts: Date.now() });
+      writeLocalCache(path, json);
     }
     return json;
   })();

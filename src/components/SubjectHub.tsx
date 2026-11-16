@@ -28,7 +28,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, getCachedSync } from '../api/client';
 import { SubjectStudyPlan } from './SubjectStudyPlan';
 import type {
   GraphData,
@@ -214,8 +214,8 @@ function RichMarkdown({
 }
 
 export function SubjectHub({ onNavigate }: SubjectHubProps) {
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [allNotes, setAllNotes] = useState<NoteItem[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>(() => getCachedSync<Subject[]>('/api/subjects') || []);
+  const [allNotes, setAllNotes] = useState<NoteItem[]>(() => getCachedSync<NoteItem[]>('/api/notes') || []);
   const [selectedSubject, setSelectedSubject] = useState<SubjectDetail | null>(null);
   const [activeNote, setActiveNote] = useState<NoteDetail | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);

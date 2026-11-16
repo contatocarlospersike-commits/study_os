@@ -87,6 +87,15 @@ export async function initDatabase(): Promise<void> {
     sqliteDb.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   }
 
+  // Fast-path: if the latest schema tables/columns already exist, skip 25+ DDL statements on cold start
+  try {
+    await queryOne(`SELECT 1 FROM study_blocks LIMIT 1`);
+    await queryOne(`SELECT kind FROM subjects LIMIT 1`);
+    return;
+  } catch {
+    // Schema not fully migrated yet — run full initialization below
+  }
+
   if (isPostgres) {
     try {
       await execDDL('CREATE EXTENSION IF NOT EXISTS vector;');

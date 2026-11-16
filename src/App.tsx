@@ -13,7 +13,7 @@ import {
   Sparkles,
   Webhook,
 } from 'lucide-react';
-import { api } from './api/client';
+import { api, getCachedSync } from './api/client';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { usePWA } from './hooks/usePWA';
 import { useStudySession } from './hooks/useStudySession';
@@ -51,10 +51,14 @@ export function App() {
     return params.get('quizId') || undefined;
   });
 
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [quizzes, setQuizzes] = useState<QuizSummary[]>([]);
-  const [recoveryPlans, setRecoveryPlans] = useState<RecoveryPlan[]>([]);
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [subjects, setSubjects] = useState<Subject[]>(() => getCachedSync<Subject[]>('/api/subjects') || []);
+  const [quizzes, setQuizzes] = useState<QuizSummary[]>(() => getCachedSync<QuizSummary[]>('/api/quizzes') || []);
+  const [recoveryPlans, setRecoveryPlans] = useState<RecoveryPlan[]>(
+    () => getCachedSync<RecoveryPlan[]>('/api/quizzes/recovery-plans') || []
+  );
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(
+    () => getCachedSync<AnalyticsData>('/api/analytics')
+  );
   const [autoQuizBanner, setAutoQuizBanner] = useState<{ quizId: string; title: string } | null>(null);
   const [toast, setToast] = useState<{ title: string; msg: string } | null>(null);
 
@@ -92,6 +96,8 @@ export function App() {
     setQuizzes(qzs);
     setRecoveryPlans(plans);
     setAnalytics(stats);
+    // Warm secondary tabs in background so switching tabs is instantaneous
+    void Promise.allSettled([api.getNotes(), api.getBooks(), api.getChecklist()]);
   }, [authSession]);
 
   useEffect(() => {
