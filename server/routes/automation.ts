@@ -1,7 +1,9 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
 import { execute, queryAll, queryOne } from '../db.js';
 import { dispatchNotification, getAutomationSettings } from '../services/dispatcher.js';
 import { checkAndDispatchDueReviews } from '../services/scheduler.js';
+import { askRagTutor } from '../services/rag.js';
 
 export const automationRouter = Router();
 
@@ -91,6 +93,54 @@ automationRouter.post('/inbound', async (req, res) => {
     return;
   }
   res.json({ ok: true, received: req.body });
+});
+
+automationRouter.post('/whatsapp-tutor', async (req, res) => {
+  const { message, subject_id = null, secret } = req.body as {
+    message?: string;
+    subject_id?: string | null;
+    secret?: string;
+  };
+  if (!message || !message.trim()) {
+    res.status(400).json({ error: 'message é obrigatório.' });
+    return;
+  }
+
+  const settings = await getAutomationSettings(req.userId);
+  const headerSecret = req.headers['x-studyos-secret'];
+  const providedSecret = typeof headerSecret === 'string' ? headerSecret : secret;
+  if (settings.webhook_secret && providedSecret && providedSecret !== settings.webhook_secret) {
+    res.status(401).json({ error: 'Webhook secret inválido.' });
+    return;
+  }
+
+  const rag = await askRagTutor({
+    userId: req.userId,
+    question: message.trim(),
+    subjectId: subject_id,
+    englishPracticeMode: false,
+  });
+
+  const now = new Date().toISOString();
+  await execute(
+    `INSERT INTO notification_logs (id, user_id, channel, event_type, title, body, payload_json, status, created_at)
+     VALUES (?, ?, 'whatsapp', 'whatsapp_tutor', ?, ?, ?, 'sent', ?)`,
+    [
+      crypto.randomUUID(),
+      req.userId,
+      `WhatsApp: ${message.slice(0, 60)}`,
+      rag.answer.slice(0, 500),
+      JSON.stringify({ citations: rag.citations, grounding_status: rag.grounding_status }),
+      now,
+    ]
+  );
+
+  res.json({
+    ok: true,
+    reply: rag.answer,
+    grounding_status: rag.grounding_status,
+    citations: rag.citations,
+  });
 });
 
 export const analyticsRouter = Router();

@@ -57,8 +57,38 @@ const ICON_PRESETS = ['📚', '🧠', '💻', '⚗️', '📐', '⚖️', '🧬'
 
 const COLOR_PRESETS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6'];
 
+function isCustomCoverImage(coverStyle?: string) {
+  return Boolean(coverStyle && (coverStyle.startsWith('data:image/') || coverStyle.startsWith('http')));
+}
+
 function getCoverGradient(coverStyle?: string) {
   return COVER_PRESETS.find((c) => c.id === coverStyle)?.gradient || COVER_PRESETS[0].gradient;
+}
+
+async function compressCoverImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Falha ao ler imagem'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Imagem inválida'));
+      img.onload = () => {
+        const maxW = 1200;
+        const scale = img.width > maxW ? maxW / img.width : 1;
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(String(reader.result));
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.78));
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function RichMarkdown({
@@ -239,6 +269,10 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
   const [showGraph, setShowGraph] = useState(false);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
 
+  // Drag & Drop state
+  const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+
   const loadSubjects = useCallback(async () => {
     const [subs, notes] = await Promise.all([api.getSubjects(), api.getNotes()]);
     setSubjects(subs);
@@ -249,15 +283,50 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
     loadSubjects().catch(console.error);
   }, [loadSubjects]);
 
-  const openNoteById = useCallback(async (noteId: string) => {
-    const detail = await api.getNote(noteId);
-    setActiveNote(detail);
-    setNoteTitleDraft(detail.title);
-    setNoteContentDraft(detail.content_markdown || '');
-    setNoteStatusDraft(detail.status || 'active');
-    setEditorMode(detail.content_markdown?.trim() ? 'read' : 'edit');
-    setSuggestedLinks([]);
-  }, []);
+  const openNoteById = useCallback(
+    async (noteId: string, localNote?: NoteItem) => {
+      const fallback = localNote || selectedSubject?.notes?.find((n) => n.id === noteId);
+      if (fallback) {
+        setActiveNote({ ...fallback, backlinks: [] });
+        setNoteTitleDraft(fallback.title);
+        setNoteContentDraft(fallback.content_markdown || '');
+        setNoteStatusDraft(fallback.status || 'active');
+        setEditorMode(fallback.content_markdown?.trim() ? 'read' : 'edit');
+        setSuggestedLinks([]);
+      }
+      const detail = await api.getNote(noteId);
+      setActiveNote(detail);
+      setNoteTitleDraft(detail.title);
+      setNoteContentDraft(detail.content_markdown || '');
+      setNoteStatusDraft(detail.status || 'active');
+      setEditorMode(detail.content_markdown?.trim() ? 'read' : 'edit');
+      setSuggestedLinks([]);
+    },
+    [selectedSubject]
+  );
+
+  const handleMoveNote = useCallback(
+    async (noteId: string, targetParentId: string | null) => {
+      if (!selectedSubject || noteId === targetParentId) return;
+      // Optimistic tree update
+      setSelectedSubject((prev) =>
+        prev
+          ? {
+              ...prev,
+              notes: (prev.notes || []).map((n) =>
+                n.id === noteId ? { ...n, parent_id: targetParentId } : n
+              ),
+            }
+          : prev
+      );
+      if (targetParentId) {
+        setExpandedFolders((p) => ({ ...p, [targetParentId]: true }));
+      }
+      await api.updateNote(noteId, { parent_id: targetParentId });
+      await loadSubjects();
+    },
+    [selectedSubject, loadSubjects]
+  );
 
   const openSubjectWorkspace = useCallback(
     async (subjectId: string, preferredNoteId?: string) => {
@@ -280,7 +349,7 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
         notes.find((n) => n.page_type !== 'folder') ||
         notes[0];
       if (targetNote) {
-        await openNoteById(targetNote.id);
+        void openNoteById(targetNote.id, targetNote);
       } else {
         setActiveNote(null);
       }
@@ -594,15 +663,46 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
       const isFolder = node.page_type === 'folder';
       const isExpanded = !!expandedFolders[node.id];
       const isActive = activeNote?.id === node.id;
+      const isDragOver = dragOverTarget === node.id;
 
       return (
         <div key={node.id}>
           <div
+            draggable
+            onDragStart={(e) => {
+              e.stopPropagation();
+              setDraggedNoteId(node.id);
+              e.dataTransfer.setData('text/plain', node.id);
+            }}
+            onDragEnd={() => {
+              setDraggedNoteId(null);
+              setDragOverTarget(null);
+            }}
+            onDragOver={(e) => {
+              if (!isFolder || !draggedNoteId || draggedNoteId === node.id) return;
+              e.preventDefault();
+              setDragOverTarget(node.id);
+            }}
+            onDragLeave={() => {
+              if (dragOverTarget === node.id) setDragOverTarget(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const id = e.dataTransfer.getData('text/plain') || draggedNoteId;
+              setDragOverTarget(null);
+              setDraggedNoteId(null);
+              if (isFolder && id && id !== node.id) {
+                void handleMoveNote(id, node.id);
+              }
+            }}
             style={{ paddingLeft: `${8 + depth * 14}px` }}
             className={`group flex items-center justify-between rounded-lg pr-1.5 py-1.5 text-[13px] transition ${
-              isActive
-                ? 'bg-indigo-500/15 text-indigo-200 font-medium'
-                : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+              isDragOver
+                ? 'bg-indigo-500/25 ring-1 ring-indigo-400 text-white'
+                : isActive
+                  ? 'bg-indigo-500/15 text-indigo-200 font-medium'
+                  : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
             }`}
           >
             <button
@@ -611,10 +711,10 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
                 if (isFolder) {
                   setExpandedFolders((p) => ({ ...p, [node.id]: !p[node.id] }));
                 } else {
-                  openNoteById(node.id);
+                  void openNoteById(node.id, node);
                 }
               }}
-              className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+              className="flex min-w-0 flex-1 items-center gap-1.5 text-left cursor-grab active:cursor-grabbing"
             >
               {isFolder ? (
                 <span className="text-zinc-500">
@@ -767,7 +867,22 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
                   className="group cursor-pointer overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/60 transition hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900/90"
                 >
                   {/* Notion Cover */}
-                  <div className={`relative h-24 w-full bg-gradient-to-r ${getCoverGradient(sub.cover_style)}`}>
+                  <div
+                    style={
+                      isCustomCoverImage(sub.cover_style)
+                        ? {
+                            backgroundImage: `linear-gradient(to top, rgba(9,9,11,0.55), rgba(9,9,11,0.15)), url(${sub.cover_style})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                          }
+                        : undefined
+                    }
+                    className={`relative h-24 w-full ${
+                      isCustomCoverImage(sub.cover_style)
+                        ? 'bg-zinc-900'
+                        : `bg-gradient-to-r ${getCoverGradient(sub.cover_style)}`
+                    }`}
+                  >
                     <div className="absolute right-3 top-3 flex items-center gap-1.5">
                       <span className="rounded-full bg-black/35 px-2.5 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
                         {sub.kind === 'project' ? 'Projeto' : 'Matéria'}
@@ -820,7 +935,22 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
       {viewMode === 'workspace' && selectedSubject && (
         <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-950/80 shadow-xl">
           {/* Subject Notion Cover Banner */}
-          <div className={`relative h-28 w-full bg-gradient-to-r ${getCoverGradient(selectedSubject.cover_style)}`}>
+          <div
+            style={
+              isCustomCoverImage(selectedSubject.cover_style)
+                ? {
+                    backgroundImage: `linear-gradient(to top, rgba(9,9,11,0.72), rgba(9,9,11,0.2)), url(${selectedSubject.cover_style})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }
+                : undefined
+            }
+            className={`relative h-32 w-full ${
+              isCustomCoverImage(selectedSubject.cover_style)
+                ? 'bg-zinc-900'
+                : `bg-gradient-to-r ${getCoverGradient(selectedSubject.cover_style)}`
+            }`}
+          >
             <div className="absolute right-4 top-3 flex items-center gap-2">
               <button
                 type="button"
@@ -874,6 +1004,21 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
                       title={preset.label}
                     />
                   ))}
+                  <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-[11px] font-medium text-zinc-200 hover:border-indigo-400 hover:text-white">
+                    <Upload className="h-3 w-3" />
+                    Subir Imagem
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const dataUrl = await compressCoverImage(file);
+                        await handleUpdateSubjectAppearance({ cover_style: dataUrl });
+                      }}
+                    />
+                  </label>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-xs font-medium text-zinc-400">Ícone:</span>
@@ -966,7 +1111,32 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
                 </div>
 
                 {/* Pages Tree */}
-                <div className="flex-1 space-y-0.5 overflow-y-auto p-2">{renderTree(null, 0)}</div>
+                <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
+                  {draggedNoteId && (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOverTarget('__root__');
+                      }}
+                      onDragLeave={() => setDragOverTarget(null)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const id = e.dataTransfer.getData('text/plain') || draggedNoteId;
+                        setDragOverTarget(null);
+                        setDraggedNoteId(null);
+                        if (id) void handleMoveNote(id, null);
+                      }}
+                      className={`mb-1.5 rounded-lg border border-dashed px-2.5 py-1.5 text-center text-[11px] transition ${
+                        dragOverTarget === '__root__'
+                          ? 'border-indigo-400 bg-indigo-500/20 text-white'
+                          : 'border-zinc-700 text-zinc-400'
+                      }`}
+                    >
+                      Soltar aqui para mover para a raiz
+                    </div>
+                  )}
+                  {renderTree(null, 0)}
+                </div>
 
                 {/* Materials & PDFs section inside Workspace */}
                 <div className="border-t border-zinc-800/80 p-3">
@@ -1355,7 +1525,30 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-zinc-400">Capa estilo Notion</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-zinc-400">Capa estilo Notion</label>
+                <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-200 hover:border-indigo-400">
+                  <Upload className="h-3 w-3" />
+                  Subir Imagem
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const dataUrl = await compressCoverImage(file);
+                      setNewCover(dataUrl);
+                    }}
+                  />
+                </label>
+              </div>
+              {isCustomCoverImage(newCover) && (
+                <div
+                  className="mt-2 h-14 w-full rounded-lg border border-zinc-700 bg-cover bg-center"
+                  style={{ backgroundImage: `url(${newCover})` }}
+                />
+              )}
               <div className="mt-1.5 grid grid-cols-6 gap-2">
                 {COVER_PRESETS.map((c) => (
                   <button

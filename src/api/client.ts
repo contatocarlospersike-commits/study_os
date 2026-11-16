@@ -31,28 +31,68 @@ import type {
   YoutubeEvaluationResult,
 } from '../types';
 
+const GET_CACHE = new Map<string, { data: unknown; ts: number }>();
+const IN_FLIGHT = new Map<string, Promise<unknown>>();
+const CACHE_TTL_MS = 15_000;
+
+export function invalidateApiCache() {
+  GET_CACHE.clear();
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const authHeaders: Record<string, string> = {};
-  if (supabase) {
-    const { data } = await supabase.auth.getSession();
-    if (data.session?.access_token) {
-      authHeaders.Authorization = `Bearer ${data.session.access_token}`;
+  const method = (init?.method || 'GET').toUpperCase();
+
+  if (method === 'GET') {
+    const cached = GET_CACHE.get(path);
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+      return cached.data as T;
+    }
+    const existing = IN_FLIGHT.get(path);
+    if (existing) {
+      return existing as Promise<T>;
+    }
+  } else {
+    GET_CACHE.clear();
+  }
+
+  const exec = (async () => {
+    const authHeaders: Record<string, string> = {};
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token) {
+        authHeaders.Authorization = `Bearer ${data.session.access_token}`;
+      }
+    }
+
+    const res = await fetch(path, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+        ...(init?.headers || {}),
+      },
+      ...init,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Request failed: ${res.status}`);
+    }
+    const json = (await res.json()) as T;
+    if (method === 'GET') {
+      GET_CACHE.set(path, { data: json, ts: Date.now() });
+    }
+    return json;
+  })();
+
+  if (method === 'GET') {
+    IN_FLIGHT.set(path, exec);
+    try {
+      return await exec;
+    } finally {
+      IN_FLIGHT.delete(path);
     }
   }
 
-  const res = await fetch(path, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-      ...(init?.headers || {}),
-    },
-    ...init,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `Request failed: ${res.status}`);
-  }
-  return res.json() as Promise<T>;
+  return exec;
 }
 
 export const api = {
@@ -121,6 +161,11 @@ export const api = {
 
   getQuizzes: () => request<QuizSummary[]>('/api/quizzes'),
   getQuiz: (id: string) => request<QuizDetail>(`/api/quizzes/${id}`),
+  generateQuiz: (body: { subject_id: string; topic?: string }) =>
+    request<QuizSummary>('/api/quizzes/generate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   submitQuiz: (id: string, answers: Record<string, number>) =>
     request<QuizAttemptResult>(`/api/quizzes/${id}/submit`, {
       method: 'POST',

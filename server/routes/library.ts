@@ -87,7 +87,36 @@ libraryRouter.post('/suggest-books', async (req, res) => {
   ].join('\n\n');
 
   const books = await suggestBooksForSubject(subject.name, context);
-  res.json({ subjectName: subject.name, books: books.slice(0, 3) });
+
+  // Enrich with real open PDF lookup on Internet Archive when open_pdf_url is empty
+  const enriched = await Promise.all(
+    books.slice(0, 3).map(async (b) => {
+      if (b.open_pdf_url && b.open_pdf_url.startsWith('http')) return b;
+      try {
+        const q = encodeURIComponent(`title:(${b.title}) AND mediatype:texts AND format:(Text PDF)`);
+        const resp = await fetch(
+          `https://archive.org/advancedsearch.php?q=${q}&fl[]=identifier&rows=1&output=json`,
+          { signal: AbortSignal.timeout(2500) }
+        );
+        if (resp.ok) {
+          const json = (await resp.json()) as { response?: { docs?: Array<{ identifier?: string }> } };
+          const id = json.response?.docs?.[0]?.identifier;
+          if (id) {
+            return {
+              ...b,
+              open_pdf_url: `https://archive.org/embed/${id}`,
+              availability_hint: 'PDF gratuito encontrado no Internet Archive',
+            };
+          }
+        }
+      } catch {
+        // ignore network timeout
+      }
+      return b;
+    })
+  );
+
+  res.json({ subjectName: subject.name, books: enriched });
 });
 
 libraryRouter.get('/books', async (req, res) => {

@@ -222,9 +222,86 @@ export async function askRagTutor(params: {
       `[TRECHO ${idx + 1} | Arquivo: "${c.materialTitle}" | Página: ${c.pageNumber}]\n${c.content}`
   );
 
+  // Pull Workspace Subjects/Projects + Notes + Library Books so the Tutor knows everything
+  const allSubjects = await queryAll<{ id: string; name: string; kind: string; description: string }>(
+    `SELECT id, name, kind, description FROM subjects WHERE user_id = ? ORDER BY updated_at DESC LIMIT 20`,
+    [params.userId]
+  );
+
+  const workspaceNotes = params.subjectId
+    ? await queryAll<{ title: string; content_markdown: string; subject_name: string }>(
+        `SELECT n.title, n.content_markdown, s.name as subject_name
+         FROM notes n JOIN subjects s ON s.id = n.subject_id
+         WHERE n.user_id = ? AND n.subject_id = ? AND n.page_type != 'folder' AND n.content_markdown != ''
+         ORDER BY n.updated_at DESC LIMIT 10`,
+        [params.userId, params.subjectId]
+      )
+    : await queryAll<{ title: string; content_markdown: string; subject_name: string }>(
+        `SELECT n.title, n.content_markdown, s.name as subject_name
+         FROM notes n JOIN subjects s ON s.id = n.subject_id
+         WHERE n.user_id = ? AND n.page_type != 'folder' AND n.content_markdown != ''
+         ORDER BY n.updated_at DESC LIMIT 12`,
+        [params.userId]
+      );
+
+  const queryTerms = params.question
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length >= 3);
+
+  const rankedNotes = [...workspaceNotes].sort((a, b) => {
+    const score = (n: typeof a) =>
+      queryTerms.reduce(
+        (acc, t) =>
+          acc +
+          (n.title.toLowerCase().includes(t) ? 3 : 0) +
+          (n.content_markdown.toLowerCase().includes(t) ? 1 : 0),
+        0
+      );
+    return score(b) - score(a);
+  });
+
+  for (const n of rankedNotes.slice(0, 6)) {
+    contextBlocks.push(
+      `[NOTA "${n.title}" (${n.subject_name}) | Página: 1]\n${n.content_markdown.slice(0, 1600)}`
+    );
+  }
+
+  const books = await queryAll<{
+    title: string;
+    author: string;
+    status: string;
+    summary_markdown: string;
+    insights_markdown: string;
+  }>(
+    `SELECT title, author, status, summary_markdown, insights_markdown FROM books WHERE user_id = ? ORDER BY updated_at DESC LIMIT 6`,
+    [params.userId]
+  );
+
+  if (allSubjects.length > 0) {
+    contextBlocks.push(
+      `[ESPAÇOS DO WORKSPACE (MATÉRIAS E PROJETOS) | Página: 1]\n${allSubjects
+        .map((s) => `- ${s.kind === 'project' ? 'Projeto' : 'Matéria'}: ${s.name}${s.description ? ` — ${s.description}` : ''}`)
+        .join('\n')}`
+    );
+  }
+
+  if (books.length > 0) {
+    contextBlocks.push(
+      `[LIVROS NA BIBLIOTECA | Página: 1]\n${books
+        .map(
+          (b) =>
+            `- "${b.title}" (${b.author || 'Autor N/I'}, status: ${b.status})${
+              b.summary_markdown ? `\n  Resumo: ${b.summary_markdown.slice(0, 400)}` : ''
+            }`
+        )
+        .join('\n')}`
+    );
+  }
+
   if (notesRows[0]?.notes_markdown) {
     contextBlocks.push(
-      `[NOTAS DA MATÉRIA "${notesRows[0].name}" | Página: 1]\n${notesRows[0].notes_markdown.slice(0, 2500)}`
+      `[NOTAS DA MATÉRIA "${notesRows[0].name}" | Página: 1]\n${notesRows[0].notes_markdown.slice(0, 1500)}`
     );
   }
 

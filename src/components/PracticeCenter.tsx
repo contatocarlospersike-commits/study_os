@@ -78,6 +78,7 @@ export function PracticeCenter({
       {tab === 'reviews' && <SpacedRepetitionQueue subjects={subjects} onReviewed={onRefresh} />}
       {tab === 'quizzes' && (
         <ActiveRecallQuiz
+          subjects={subjects}
           quizzes={quizzes}
           initialQuizId={initialQuizId}
           onQuizCompleted={onRefresh}

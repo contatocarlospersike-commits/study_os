@@ -41,6 +41,7 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
   const [loading, setLoading] = useState(true);
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [readerModal, setReaderModal] = useState<{ title: string; url: string; isLocalPdf?: boolean } | null>(null);
 
   // Add book form
   const [newTitle, setNewTitle] = useState('');
@@ -592,17 +593,51 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
                       {selectedBook.author} · {SOURCE_LABELS[selectedBook.source_type]}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="cursor-pointer flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25">
+                      <FileUp className="w-3.5 h-3.5" />
+                      Ler PDF Local
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const blobUrl = URL.createObjectURL(file);
+                          setReaderModal({
+                            title: `${selectedBook.title} (${file.name})`,
+                            url: blobUrl,
+                            isLocalPdf: true,
+                          });
+                        }}
+                      />
+                    </label>
                     {selectedBook.external_url && (
-                      <a
-                        href={selectedBook.external_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25"
-                      >
-                        Abrir Link
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setReaderModal({
+                              title: selectedBook.title,
+                              url: selectedBook.external_url,
+                            })
+                          }
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25"
+                        >
+                          <BookOpen className="w-3.5 h-3.5" />
+                          Ler no Study OS
+                        </button>
+                        <a
+                          href={selectedBook.external_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:text-white"
+                          title="Abrir em nova aba"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </>
                     )}
                     <button
                       onClick={() => handleDeleteBook(selectedBook.id)}
@@ -900,6 +935,47 @@ export const LibraryInbox: React.FC<LibraryInboxProps> = ({ subjects, onDataChan
                 <p>3. O texto é fatiado com embeddings (`gemini-embedding-001`) para o Tutor IA.</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Embedded Book / PDF Reader Modal */}
+      {readerModal && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950/95 backdrop-blur-sm">
+          <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <BookOpen className="h-4 w-4 shrink-0 text-cyan-400" />
+              <span className="truncate text-sm font-semibold text-white">{readerModal.title}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {!readerModal.isLocalPdf && (
+                <a
+                  href={readerModal.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200 hover:text-white"
+                >
+                  Abrir fora <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (readerModal.isLocalPdf) URL.revokeObjectURL(readerModal.url);
+                  setReaderModal(null);
+                }}
+                className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700"
+              >
+                Fechar Leitor
+              </button>
+            </div>
+          </div>
+          <div className="relative flex-1 bg-zinc-900">
+            <iframe
+              src={readerModal.url}
+              title={readerModal.title}
+              className="h-full w-full border-0"
+            />
           </div>
         </div>
       )}

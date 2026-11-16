@@ -1,10 +1,119 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
+import { GoogleGenAI, Type } from '@google/genai';
 import { execute, queryAll, queryOne } from '../db.js';
 import { generateRecoveryQuiz } from '../engine/recoveryPlan.js';
 import { dispatchNotification, getAutomationSettings } from '../services/dispatcher.js';
 
 export const quizzesRouter = Router();
+
+quizzesRouter.post('/generate', async (req, res) => {
+  const { subject_id, topic = '' } = req.body as { subject_id?: string; topic?: string };
+  if (!subject_id) {
+    res.status(400).json({ error: 'subject_id é obrigatório.' });
+    return;
+  }
+  const subject = await queryOne<{ id: string; name: string; description: string }>(
+    `SELECT id, name, description FROM subjects WHERE id = ? AND user_id = ?`,
+    [subject_id, req.userId]
+  );
+  if (!subject) {
+    res.status(404).json({ error: 'Matéria/Projeto não encontrado.' });
+    return;
+  }
+
+  const notes = await queryAll<{ title: string; content_markdown: string }>(
+    `SELECT title, content_markdown FROM notes WHERE subject_id = ? AND user_id = ? AND page_type != 'folder' ORDER BY updated_at DESC LIMIT 8`,
+    [subject_id, req.userId]
+  );
+  const chunks = await queryAll<{ content: string }>(
+    `SELECT content FROM document_chunks WHERE subject_id = ? AND user_id = ? LIMIT 8`,
+    [subject_id, req.userId]
+  );
+
+  const contextText = [
+    `Matéria/Projeto: ${subject.name} — ${subject.description}`,
+    topic ? `Foco pedido pelo aluno: ${topic}` : '',
+    ...notes.map((n) => `Nota "${n.title}": ${n.content_markdown.slice(0, 700)}`),
+    ...chunks.map((c) => `Material: ${c.content.slice(0, 500)}`),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const apiKey = process.env.GEMINI_API_KEY || '';
+  if (!apiKey) {
+    res.status(500).json({ error: 'GEMINI_API_KEY não configurada.' });
+    return;
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+  const response = await ai.models.generateContent({
+    model: process.env.GEMINI_CHAT_MODEL || 'gemini-3.5-flash',
+    contents: `Crie um quiz de Active Recall em português (PT-BR) com exatamente 5 questões de múltipla escolha (4 opções cada) baseado no contexto abaixo. Se o contexto for curto, use conhecimento acadêmico sólido do tema.\n\n${contextText}`,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          questions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                subtopic: { type: Type.STRING },
+                prompt: { type: Type.STRING },
+                options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                correctIndex: { type: Type.INTEGER },
+                explanation: { type: Type.STRING },
+              },
+              required: ['subtopic', 'prompt', 'options', 'correctIndex', 'explanation'],
+            },
+          },
+        },
+        required: ['title', 'questions'],
+      },
+    },
+  });
+
+  const parsed = JSON.parse(response.text || '{}') as {
+    title?: string;
+    questions?: Array<{
+      subtopic: string;
+      prompt: string;
+      options: string[];
+      correctIndex: number;
+      explanation: string;
+    }>;
+  };
+
+  const quizId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const quizTitle = parsed.title || `Active Recall: ${topic || subject.name}`;
+  await execute(
+    `INSERT INTO quizzes (id, user_id, subject_id, title, type, created_at) VALUES (?, ?, ?, ?, 'standard', ?)`,
+    [quizId, req.userId, subject_id, quizTitle, now]
+  );
+
+  for (const q of (parsed.questions || []).slice(0, 5)) {
+    const opts = Array.isArray(q.options) && q.options.length >= 2 ? q.options.slice(0, 4) : ['Opção A', 'Opção B', 'Opção C', 'Opção D'];
+    const correctIdx = Math.max(0, Math.min(opts.length - 1, Number(q.correctIndex) || 0));
+    await execute(
+      `INSERT INTO quiz_questions (id, quiz_id, subtopic, prompt, options_json, correct_index, explanation)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [crypto.randomUUID(), quizId, q.subtopic || subject.name, q.prompt, JSON.stringify(opts), correctIdx, q.explanation || '']
+    );
+  }
+
+  const created = await queryOne(
+    `SELECT q.*, s.name as subject_name, s.color as subject_color,
+      (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id = q.id) as question_count,
+      NULL as last_score_pct
+     FROM quizzes q JOIN subjects s ON s.id = q.subject_id WHERE q.id = ?`,
+    [quizId]
+  );
+  res.status(201).json(created);
+});
 
 quizzesRouter.get('/', async (req, res) => {
   const quizzes = await queryAll(

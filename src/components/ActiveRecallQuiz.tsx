@@ -3,20 +3,23 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  Loader2,
   RotateCcw,
   Sparkles,
   XCircle,
 } from 'lucide-react';
 import { api } from '../api/client';
-import type { QuizAttemptResult, QuizDetail, QuizSummary } from '../types';
+import type { QuizAttemptResult, QuizDetail, QuizSummary, Subject } from '../types';
 
 interface ActiveRecallQuizProps {
+  subjects?: Subject[];
   quizzes: QuizSummary[];
   initialQuizId?: string;
   onQuizCompleted: () => Promise<void>;
 }
 
 export function ActiveRecallQuiz({
+  subjects = [],
   quizzes,
   initialQuizId,
   onQuizCompleted,
@@ -26,6 +29,37 @@ export function ActiveRecallQuiz({
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<QuizAttemptResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [genSubjectId, setGenSubjectId] = useState<string>(subjects[0]?.id || '');
+  const [genTopic, setGenTopic] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState('');
+
+  useEffect(() => {
+    if (!genSubjectId && subjects.length > 0) {
+      setGenSubjectId(subjects[0].id);
+    }
+  }, [subjects, genSubjectId]);
+
+  const handleGenerateQuiz = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!genSubjectId || generating) return;
+    setGenerating(true);
+    setGenError('');
+    try {
+      const created = await api.generateQuiz({
+        subject_id: genSubjectId,
+        topic: genTopic.trim() || undefined,
+      });
+      setGenTopic('');
+      await onQuizCompleted();
+      setActiveQuizId(created.id);
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : 'Erro ao gerar quiz');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   useEffect(() => {
     if (initialQuizId) {
@@ -68,6 +102,50 @@ export function ActiveRecallQuiz({
         </p>
         <h1 className="heading-fluid font-bold text-zinc-50">Quizzes (Active Recall)</h1>
       </div>
+
+      {/* Quick AI Quiz Generator */}
+      {subjects.length > 0 && (
+        <form
+          onSubmit={handleGenerateQuiz}
+          className="flex flex-wrap items-center gap-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-3.5"
+        >
+          <select
+            value={genSubjectId}
+            onChange={(e) => setGenSubjectId(e.target.value)}
+            className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 focus:border-indigo-500 focus:outline-none"
+          >
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.icon || '📚'} {s.name}
+              </option>
+            ))}
+          </select>
+          <input
+            value={genTopic}
+            onChange={(e) => setGenTopic(e.target.value)}
+            placeholder="Tema específico (opcional — ou usa suas notas/materiais)"
+            className="min-w-[220px] flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:border-indigo-500 focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={generating}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-amber-400 disabled:opacity-50"
+          >
+            {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {generating ? 'Gerando 5 questões...' : 'Gerar Quiz com IA'}
+          </button>
+          {genError && <p className="w-full text-xs text-rose-400">{genError}</p>}
+        </form>
+      )}
+
+      {quizzes.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-8 text-center">
+          <p className="text-sm font-medium text-zinc-200">Nenhum quiz criado ainda</p>
+          <p className="mt-1 text-xs text-zinc-400">
+            Removemos os dados de demonstração. Use o botão acima para gerar um quiz das suas matérias/notas ou envie um material na Biblioteca.
+          </p>
+        </div>
+      )}
 
       {/* Swipeable Quiz Selector */}
       <div className="swipe-deck" role="region" aria-label="Available Quizzes">

@@ -289,6 +289,25 @@ export function AutomationCenter({
           </div>
         </section>
       </div>
+
+      {/* WhatsApp AI Tutor Inbound Endpoint */}
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-white">Tutor IA no WhatsApp (n8n Inbound)</h2>
+          <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+            Notas + Projetos + PDFs + Biblioteca
+          </span>
+        </div>
+        <p className="text-xs text-zinc-400">
+          Configure seu fluxo no n8n para encaminhar mensagens do WhatsApp via <code className="text-cyan-300">POST</code> para:
+        </p>
+        <pre className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-[11px] text-zinc-300">
+{`POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/automation/whatsapp-tutor
+Headers: { "Content-Type": "application/json", "x-studyos-secret": "<seu-webhook-secret>" }
+Body:    { "message": "Resumo da minha nota de Cálculo" }
+Retorno: { "ok": true, "reply": "...", "citations": [...] }`}
+        </pre>
+      </section>
     </div>
   );
 }
