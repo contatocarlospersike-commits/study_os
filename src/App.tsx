@@ -13,7 +13,7 @@ import {
   Sparkles,
   Webhook,
 } from 'lucide-react';
-import { api, getCachedSync } from './api/client';
+import { api, getCachedSync, invalidateApiCache } from './api/client';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { usePWA } from './hooks/usePWA';
 import { useStudySession } from './hooks/useStudySession';
@@ -135,6 +135,11 @@ export function App() {
   };
 
   const handleSignOut = async () => {
+    invalidateApiCache();
+    setSubjects([]);
+    setQuizzes([]);
+    setRecoveryPlans([]);
+    setAnalytics(null);
     if (supabase) {
       await supabase.auth.signOut();
     }
