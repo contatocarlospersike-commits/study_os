@@ -90,6 +90,7 @@ export async function initDatabase(): Promise<void> {
   // Fast-path: if the latest schema tables/columns already exist, skip 25+ DDL statements on cold start
   try {
     await queryOne(`SELECT 1 FROM feynman_lessons LIMIT 1`);
+    await queryOne(`SELECT cover_style FROM books LIMIT 1`);
     await queryOne(`SELECT kind FROM subjects LIMIT 1`);
     return;
   } catch {
@@ -301,6 +302,7 @@ export async function initDatabase(): Promise<void> {
       summary_markdown TEXT NOT NULL DEFAULT '',
       insights_markdown TEXT NOT NULL DEFAULT '',
       selective_plan_markdown TEXT NOT NULL DEFAULT '',
+      cover_style TEXT NOT NULL DEFAULT 'aurora',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -419,6 +421,7 @@ export async function initDatabase(): Promise<void> {
     `ALTER TABLE subjects ADD COLUMN kind TEXT NOT NULL DEFAULT 'subject'`,
     `ALTER TABLE note_links ADD COLUMN source_note_id TEXT`,
     `ALTER TABLE note_links ADD COLUMN target_note_id TEXT`,
+    `ALTER TABLE books ADD COLUMN cover_style TEXT NOT NULL DEFAULT 'aurora'`,
   ];
   for (const sql of safeAlters) {
     try {

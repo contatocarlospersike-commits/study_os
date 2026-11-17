@@ -1,19 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
-  Brain,
+  BookOpen,
+  Bot,
   CheckCircle2,
+  Circle,
   Clock,
-  Flame,
   Layers,
   Play,
   Sparkles,
   Square,
   Zap,
 } from 'lucide-react';
-import { api } from '../api/client';
-import type { AnalyticsData, NavView, QuizSummary, RecoveryPlan, StudySession, Subject } from '../types';
+import { api, getCachedSync } from '../api/client';
+import type {
+  AnalyticsData,
+  ChecklistItem,
+  NavView,
+  QuizSummary,
+  RecoveryPlan,
+  StudySession,
+  Subject,
+} from '../types';
 
 interface DashboardProps {
   subjects: Subject[];
@@ -23,15 +32,35 @@ interface DashboardProps {
   activeSession: StudySession | null;
   elapsedSec: number;
   sessionEnding: boolean;
-  onStartSession: (subjectId: string, subtopic: string, mode: 'deep_work' | 'feynman' | 'interleaving') => Promise<void>;
+  onStartSession: (
+    subjectId: string,
+    subtopic: string,
+    mode: 'deep_work' | 'feynman' | 'interleaving'
+  ) => Promise<void>;
   onEndSession: () => Promise<void>;
   onNavigate: (view: NavView, opts?: { subjectId?: string; quizId?: string }) => void;
 }
+
+const COVER_MINI: Record<string, string> = {
+  aurora: 'from-indigo-600/80 via-violet-600/70 to-fuchsia-600/70',
+  ocean: 'from-cyan-600/80 via-sky-600/70 to-blue-700/80',
+  emerald: 'from-emerald-600/80 via-teal-600/70 to-cyan-700/80',
+  sunset: 'from-amber-500/80 via-orange-600/75 to-rose-600/80',
+  slate: 'from-zinc-700/90 via-zinc-800/90 to-zinc-900',
+  crimson: 'from-rose-600/80 via-pink-600/70 to-purple-700/80',
+};
 
 function formatDuration(totalSec: number): string {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
 }
 
 export function Dashboard({
@@ -47,453 +76,435 @@ export function Dashboard({
   onNavigate,
 }: DashboardProps) {
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(subjects[0]?.id || '');
-  const [subtopic, setSubtopic] = useState('Geral');
+  const [subtopic, setSubtopic] = useState('');
   const [mode, setMode] = useState<'deep_work' | 'feynman' | 'interleaving'>('deep_work');
-  const [timerMode, setTimerMode] = useState<'free' | 'pomodoro25' | 'deep50'>('free');
   const [starting, setStarting] = useState(false);
 
-  // Post-session Cognitive Check-in
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(
+    () => getCachedSync<ChecklistItem[]>('/api/cognitive/checklist') || []
+  );
+
+  // Post-session check-in
   const [showCheckin, setShowCheckin] = useState(false);
   const [energyLevel, setEnergyLevel] = useState(4);
   const [focusLevel, setFocusLevel] = useState(4);
-  const [checkinSaved, setCheckinSaved] = useState(false);
+  const [savingCheckin, setSavingCheckin] = useState(false);
 
-  const effectiveSubjectId = selectedSubjectId || subjects[0]?.id || '';
-  const pendingRecoveries = recoveryPlans.filter((p) => p.status === 'pending');
-  const dueCards = analytics?.totals.due_cards ?? 0;
-  const avgScore = analytics?.totals.avg_score_pct;
+  useEffect(() => {
+    if (!selectedSubjectId && subjects[0]?.id) {
+      setSelectedSubjectId(subjects[0].id);
+    }
+  }, [subjects, selectedSubjectId]);
+
+  useEffect(() => {
+    api
+      .getChecklist()
+      .then(setChecklist)
+      .catch(() => {});
+  }, []);
+
+  const handleToggleChecklist = async (id: string) => {
+    setChecklist((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, completed: item.completed ? 0 : 1 } : item))
+    );
+    try {
+      const updated = await api.toggleChecklistItem(id);
+      setChecklist((prev) => prev.map((item) => (item.id === id ? updated : item)));
+    } catch {
+      // revert silently if failed
+    }
+  };
 
   const handleStart = async () => {
-    if (!effectiveSubjectId) return;
+    const sid = selectedSubjectId || subjects[0]?.id;
+    if (!sid) return;
     setStarting(true);
-    setCheckinSaved(false);
     try {
-      await onStartSession(effectiveSubjectId, subtopic.trim() || 'Geral', mode);
+      await onStartSession(sid, subtopic.trim() || 'Bloco Focado', mode);
     } finally {
       setStarting(false);
     }
   };
 
-  const handleEndWithCheckin = async () => {
+  const handleEnd = async () => {
     await onEndSession();
     setShowCheckin(true);
   };
 
-  const handleSubmitCheckin = async () => {
+  const handleSaveCheckin = async () => {
+    setSavingCheckin(true);
     try {
       await api.createCheckin({
         block_mode: mode,
-        duration_min: Math.max(1, Math.round(elapsedSec / 60)),
+        duration_min: Math.max(15, Math.round(elapsedSec / 60) || 25),
         energy_level: energyLevel,
         focus_level: focusLevel,
       });
-      setCheckinSaved(true);
-      setTimeout(() => setShowCheckin(false), 1500);
-    } catch {
       setShowCheckin(false);
+    } finally {
+      setSavingCheckin(false);
     }
   };
 
+  const dueCards = analytics?.totals.due_cards ?? 0;
+  const totalStudyMin = Math.round((analytics?.totals.total_study_sec ?? 0) / 60);
+  const avgScore = analytics?.totals.avg_score_pct;
+  const pendingRecoveries = recoveryPlans.filter((r) => r.status === 'pending');
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      {/* Clean Hero Header */}
+      <div className="flex flex-col gap-4 rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400">
-            Central de Comando Cognitivo
+          <p className="text-xs font-medium text-indigo-400">Study OS · Central de Execução</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">{getGreeting()}!</h1>
+          <p className="mt-1 text-xs text-zinc-400">
+            {subjects.length} espaço(s) ativos • {dueCards} revisão(ões) SM-2 pendentes • {totalStudyMin} min estudados
+            {avgScore !== null && avgScore !== undefined ? ` • ${avgScore}% acurácia` : ''}
           </p>
-          <h1 className="heading-fluid font-bold tracking-tight text-zinc-50">
-            Study OS
-          </h1>
         </div>
+
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => onNavigate('practice')}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-400"
+            onClick={() => onNavigate('subjects')}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500"
           >
-            <Layers className="h-4 w-4" />
+            <BookOpen className="h-3.5 w-3.5" />
+            Workspace
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('practice')}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-700"
+          >
+            <Layers className="h-3.5 w-3.5 text-cyan-400" />
             Revisões ({dueCards})
           </button>
           <button
             type="button"
-            onClick={() => onNavigate('practice')}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:border-zinc-500 hover:bg-zinc-800"
+            onClick={() => onNavigate('professor')}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-700"
           >
-            <Zap className="h-4 w-4 text-amber-400" />
-            Active Recall
+            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+            Aula Feynman
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('tutor')}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-700"
+          >
+            <Bot className="h-3.5 w-3.5 text-emerald-400" />
+            Tutor IA
           </button>
         </div>
       </div>
 
-      {/* KPI Strip */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
-          <div className="flex items-center justify-between text-xs text-zinc-400">
-            <span>Fila de Revisão</span>
-            <Layers className="h-4 w-4 text-cyan-400" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-zinc-50">{dueCards}</p>
-          <p className="mt-1 text-xs text-zinc-400">
-            de {analytics?.totals.total_cards ?? 0} flashcards
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
-          <div className="flex items-center justify-between text-xs text-zinc-400">
-            <span>Média em Quizzes</span>
-            <Brain className="h-4 w-4 text-emerald-400" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-zinc-50">
-            {avgScore !== null && avgScore !== undefined ? `${avgScore}%` : '—'}
-          </p>
-          <p className="mt-1 text-xs text-zinc-400">
-            {analytics?.totals.total_attempts ?? 0} tentativas
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
-          <div className="flex items-center justify-between text-xs text-zinc-400">
-            <span>Recuperação</span>
-            <AlertTriangle className="h-4 w-4 text-amber-400" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-zinc-50">{pendingRecoveries.length}</p>
-          <p className="mt-1 text-xs text-zinc-400">Subtópicos pendentes</p>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
-          <div className="flex items-center justify-between text-xs text-zinc-400">
-            <span>Foco Profundo</span>
-            <Flame className="h-4 w-4 text-violet-400" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-zinc-50">
-            {Math.round((analytics?.totals.total_study_sec ?? 0) / 60)}m
-          </p>
-          <p className="mt-1 text-xs text-zinc-400">Blocos registrados</p>
-        </div>
-      </div>
-
-      {/* Study Session Launcher + Auto-Quiz Trigger */}
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 space-y-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-cyan-400" />
-              <h2 className="text-base font-semibold text-zinc-100">
-                Bloco de Estudo & Auto-Quiz
-              </h2>
-            </div>
-            <p className="mt-1 text-sm text-zinc-400">
-              Ao encerrar o bloco, um quiz de 5 questões é gerado automaticamente e disparado para seu WhatsApp / n8n.
-            </p>
-          </div>
-
+      {/* Compact Focus Timer Bar */}
+      {subjects.length > 0 && (
+        <section className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
           {activeSession ? (
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-cyan-500/40 bg-cyan-950/30 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-cyan-400" />
-                {timerMode === 'free' ? (
-                  <span className="font-mono text-lg font-bold text-cyan-300">
-                    {formatDuration(elapsedSec)}
-                  </span>
-                ) : (
-                  (() => {
-                    const target = timerMode === 'pomodoro25' ? 25 * 60 : 50 * 60;
-                    const remaining = Math.max(0, target - elapsedSec);
-                    return (
-                      <span className={`font-mono text-lg font-bold ${remaining === 0 ? 'text-emerald-300' : 'text-cyan-300'}`}>
-                        {remaining === 0
-                          ? `Meta atingida! Pausa ${timerMode === 'pomodoro25' ? '5m' : '10m'}`
-                          : formatDuration(remaining)}
-                      </span>
-                    );
-                  })()
-                )}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-400" />
+                <div>
+                  <p className="text-xs font-semibold text-emerald-300">Sessão de Foco em Andamento</p>
+                  <p className="text-sm font-medium text-white">{activeSession.subtopic}</p>
+                </div>
               </div>
-              <span className="text-xs text-zinc-300">
-                {activeSession.subtopic} ({activeSession.mode.replace('_', ' ')})
-              </span>
-              <button
-                type="button"
-                disabled={sessionEnding}
-                onClick={handleEndWithCheckin}
-                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-rose-500 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-400 disabled:opacity-50"
-              >
-                <Square className="h-3.5 w-3.5 fill-current" />
-                {sessionEnding ? 'Gerando Quiz...' : 'Encerrar & Gerar Quiz'}
-              </button>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-2xl font-bold tabular-nums text-white">
+                  {formatDuration(elapsedSec)}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleEnd}
+                  disabled={sessionEnding}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-rose-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-rose-400 disabled:opacity-50"
+                >
+                  <Square className="h-3.5 w-3.5" />
+                  {sessionEnding ? 'Gerando Quiz...' : 'Finalizar'}
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
               <select
-                aria-label="Modo do Cronômetro"
-                value={timerMode}
-                onChange={(e) => setTimerMode(e.target.value as 'free' | 'pomodoro25' | 'deep50')}
-                className="min-h-[44px] rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-xs text-cyan-300"
-              >
-                <option value="free">Cronômetro Livre</option>
-                <option value="pomodoro25">Pomodoro (25m / 5m)</option>
-                <option value="deep50">Bloco Longo (50m / 10m)</option>
-              </select>
-              <select
-                aria-label="Matéria de Estudo"
-                value={effectiveSubjectId}
+                value={selectedSubjectId}
                 onChange={(e) => setSelectedSubjectId(e.target.value)}
-                className="min-h-[44px] rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
+                className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200"
               >
                 {subjects.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {s.icon || '📚'} {s.name}
                   </option>
                 ))}
               </select>
-
               <input
-                type="text"
-                aria-label="Subtópico"
                 value={subtopic}
                 onChange={(e) => setSubtopic(e.target.value)}
-                placeholder="Subtópico (ex: Limites)"
-                className="min-h-[44px] rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 placeholder:text-zinc-500"
+                placeholder="O que vai estudar neste bloco? (ex: Limites, Aula 03...)"
+                className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:border-indigo-500 focus:outline-none"
               />
-
               <select
-                aria-label="Técnica de Estudo"
                 value={mode}
-                onChange={(e) => setMode(e.target.value as 'deep_work' | 'feynman' | 'interleaving')}
-                className="min-h-[44px] rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
+                onChange={(e) => setMode(e.target.value as typeof mode)}
+                className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200"
               >
-                <option value="deep_work">Foco Profundo</option>
-                <option value="feynman">Técnica Feynman</option>
-                <option value="interleaving">Intercalação</option>
+                <option value="deep_work">Deep Work</option>
+                <option value="feynman">Feynman</option>
+                <option value="interleaving">Intercalado</option>
               </select>
-
               <button
                 type="button"
-                disabled={starting || !effectiveSubjectId}
                 onClick={handleStart}
-                className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-400 disabled:opacity-50"
+                disabled={starting}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-zinc-950 hover:bg-emerald-400 disabled:opacity-50"
               >
-                <Play className="h-4 w-4 fill-current" />
+                <Play className="h-3.5 w-3.5" />
                 Iniciar Bloco
               </button>
             </div>
           )}
-        </div>
 
-        {/* Post-session Check-in */}
-        {showCheckin && !activeSession && (
-          <div className="rounded-xl border border-cyan-500/30 bg-zinc-950/90 p-3.5 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-zinc-200">
-              <strong>Check-in Cognitivo:</strong> Como estava sua energia e foco neste bloco?
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-              <label className="flex items-center gap-1.5 text-zinc-300">
-                Energia:
-                <select
-                  value={energyLevel}
-                  onChange={(e) => setEnergyLevel(Number(e.target.value))}
-                  className="rounded-lg bg-zinc-900 border border-zinc-700 px-2 py-1 text-zinc-100"
+          {showCheckin && !activeSession && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs">
+              <span className="font-medium text-indigo-200">Check-in rápido pós-sessão:</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-1.5 text-zinc-300">
+                  Energia (1-5):
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={energyLevel}
+                    onChange={(e) => setEnergyLevel(Number(e.target.value))}
+                    className="w-12 rounded border border-zinc-700 bg-zinc-950 px-1.5 py-0.5 text-center text-white"
+                  />
+                </label>
+                <label className="flex items-center gap-1.5 text-zinc-300">
+                  Foco (1-5):
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={focusLevel}
+                    onChange={(e) => setFocusLevel(Number(e.target.value))}
+                    className="w-12 rounded border border-zinc-700 bg-zinc-950 px-1.5 py-0.5 text-center text-white"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSaveCheckin}
+                  disabled={savingCheckin}
+                  className="rounded-lg bg-indigo-600 px-3 py-1 font-semibold text-white hover:bg-indigo-500"
                 >
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n}>
-                      {n}/5
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center gap-1.5 text-zinc-300">
-                Foco:
-                <select
-                  value={focusLevel}
-                  onChange={(e) => setFocusLevel(Number(e.target.value))}
-                  className="rounded-lg bg-zinc-900 border border-zinc-700 px-2 py-1 text-zinc-100"
-                >
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n}>
-                      {n}/5
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={handleSubmitCheckin}
-                className="rounded-lg bg-cyan-500 px-3 py-1.5 font-semibold text-zinc-950 hover:bg-cyan-400"
-              >
-                {checkinSaved ? 'Registrado!' : 'Salvar Check-in'}
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Automated Recovery Plans Banner */}
-      {pendingRecoveries.length > 0 && (
-        <section className="rounded-2xl border border-amber-500/40 bg-amber-950/20 p-5">
-          <div className="flex items-center gap-2 text-amber-300">
-            <AlertTriangle className="h-5 w-5" />
-            <h2 className="text-base font-semibold">
-              Planos de Recuperação ({pendingRecoveries.length} Pendentes)
-            </h2>
-          </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            {pendingRecoveries.slice(0, 4).map((plan) => (
-              <div
-                key={plan.id}
-                className="flex flex-col justify-between rounded-xl border border-amber-500/25 bg-zinc-950/70 p-4"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-amber-300">
-                      {plan.subject_name}
-                    </span>
-                    <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-200">
-                      Reforço: {plan.weak_subtopics.join(', ')}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-zinc-300">{plan.recommendation}</p>
-                </div>
-                {plan.recovery_quiz_id && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onNavigate('practice', { quizId: plan.recovery_quiz_id || undefined })
-                    }
-                    className="mt-3 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-zinc-950 hover:bg-amber-400"
-                  >
-                    Fazer Quiz de Recuperação
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                )}
+                  {savingCheckin ? 'Salvando...' : 'Salvar'}
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </section>
       )}
 
-      {/* Subject Hubs */}
-      <section className="cq-panel">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-zinc-100">Matérias</h2>
-          <button
-            type="button"
-            onClick={() => onNavigate('subjects')}
-            className="text-xs font-medium text-cyan-400 hover:text-cyan-300"
-          >
-            Gerenciar matérias & notas →
-          </button>
-        </div>
-
-        <div className="cq-grid">
-          {subjects.map((subject) => (
-            <div
-              key={subject.id}
-              className="group flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 hover:border-zinc-700"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: subject.color }}
-                    />
-                    <h3 className="font-semibold text-zinc-100">{subject.name}</h3>
-                  </div>
-                  {(subject.due_count ?? 0) > 0 && (
-                    <span className="rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-xs font-semibold text-cyan-300">
-                      {subject.due_count} pendentes
-                    </span>
-                  )}
-                </div>
-                <p className="mt-2 line-clamp-2 text-sm text-zinc-400">{subject.description}</p>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between border-t border-zinc-800/80 pt-3">
-                <span className="text-xs text-zinc-400">
-                  {subject.concept_count ?? 0} conceitos · {subject.card_count ?? 0} cards
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('subjects', { subjectId: subject.id })}
-                  className="inline-flex min-h-[36px] items-center gap-1 rounded-lg bg-zinc-800 px-3 text-xs font-medium text-zinc-100 hover:bg-zinc-700"
-                >
-                  Abrir Caderno
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
+      {/* Main 2-Column Content */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Left: Checklist & Recovery */}
+        <div className="space-y-4 lg:col-span-5">
+          <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white">Checklist de Hoje</h2>
+              <button
+                type="button"
+                onClick={() => onNavigate('professor')}
+                className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
+              >
+                Montar agenda →
+              </button>
             </div>
-          ))}
-        </div>
-      </section>
 
-      {/* Recent Quizzes */}
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-zinc-100">Quizzes Prontos (Active Recall)</h2>
-          <button
-            type="button"
-            onClick={() => onNavigate('practice')}
-            className="text-xs font-medium text-cyan-400 hover:text-cyan-300"
-          >
-            Ver todos →
-          </button>
-        </div>
-
-        <div className="swipe-deck" role="region" aria-label="Quizzes prontos">
-          {quizzes.slice(0, 6).map((q) => (
-            <div
-              key={q.id}
-              className="flex min-w-[260px] max-w-[300px] flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-zinc-400">{q.subject_name}</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      q.type === 'recovery'
-                        ? 'bg-amber-500/20 text-amber-300'
-                        : q.type === 'auto_session'
-                          ? 'bg-violet-500/20 text-violet-300'
-                          : 'bg-cyan-500/15 text-cyan-300'
-                    }`}
+            {checklist.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-800 p-5 text-center text-xs text-zinc-400">
+                Nenhuma tarefa agendada para hoje ainda. Use o <strong>Estudo Ativo</strong> no Workspace ou o <strong>Planejador</strong> na aba Professor.
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {checklist.slice(0, 6).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleToggleChecklist(item.id)}
+                    className="flex w-full items-start gap-2.5 rounded-xl border border-zinc-800/70 bg-zinc-950/60 px-3 py-2.5 text-left transition hover:border-zinc-700"
                   >
-                    {q.type === 'recovery'
-                      ? 'Recuperação'
-                      : q.type === 'auto_session'
-                        ? 'Auto 5Q'
-                        : 'Padrão'}
-                  </span>
-                </div>
-                <h3 className="mt-2 line-clamp-2 text-sm font-semibold text-zinc-100">{q.title}</h3>
+                    {item.completed ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <Circle className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-xs font-medium ${
+                          item.completed ? 'text-zinc-500 line-through' : 'text-zinc-100'
+                        }`}
+                      >
+                        {item.title}
+                      </p>
+                      <p className="text-[11px] text-zinc-500">
+                        {item.subject_name} · {item.duration_min} min
+                      </p>
+                    </div>
+                  </button>
+                ))}
               </div>
+            )}
+          </div>
 
-              <div className="mt-4 flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-xs text-zinc-400">
-                  {q.last_score_pct !== null ? (
-                    <>
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                      Último: {q.last_score_pct}%
-                    </>
-                  ) : (
-                    <>
-                      <Clock className="h-3.5 w-3.5" />
-                      {q.question_count} questões
-                    </>
+          {pendingRecoveries.length > 0 && (
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+                <AlertTriangle className="h-4 w-4" />
+                Pontos de Reforço ({pendingRecoveries.length})
+              </div>
+              {pendingRecoveries.slice(0, 2).map((plan) => (
+                <div key={plan.id} className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3 text-xs">
+                  <p className="font-semibold text-white">{plan.subject_name}</p>
+                  <p className="mt-1 text-zinc-400">{plan.recommendation}</p>
+                  {plan.recovery_quiz_id && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onNavigate('practice', { quizId: plan.recovery_quiz_id || undefined })
+                      }
+                      className="mt-2 inline-flex items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-semibold text-zinc-950 hover:bg-amber-400"
+                    >
+                      Reforçar Agora <ArrowRight className="h-3 w-3" />
+                    </button>
                   )}
-                </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Spaces (Subjects & Projects) */}
+        <div className="space-y-4 lg:col-span-7">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-white">Seus Espaços (Matérias & Projetos)</h2>
+            <button
+              type="button"
+              onClick={() => onNavigate('subjects')}
+              className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
+            >
+              Ver todos →
+            </button>
+          </div>
+
+          {subjects.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 p-8 text-center">
+              <p className="text-sm font-medium text-zinc-200">Comece criando suas matérias e cursos</p>
+              <p className="mt-1 text-xs text-zinc-400">
+                Organize Ciência da Computação, Alura, Asimov e n8n no Workspace com capas, notas e planos de estudo.
+              </p>
+              <button
+                type="button"
+                onClick={() => onNavigate('subjects')}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+              >
+                Abrir Workspace <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {subjects.slice(0, 6).map((sub) => {
+                const isImg =
+                  sub.cover_style &&
+                  (sub.cover_style.startsWith('data:image/') || sub.cover_style.startsWith('http'));
+                const gradient = COVER_MINI[sub.cover_style || 'aurora'] || COVER_MINI.aurora;
+                return (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    onClick={() => onNavigate('subjects', { subjectId: sub.id })}
+                    className="group overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/60 text-left transition hover:border-zinc-700"
+                  >
+                    <div
+                      style={
+                        isImg
+                          ? {
+                              backgroundImage: `url(${sub.cover_style})`,
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                            }
+                          : undefined
+                      }
+                      className={`h-12 w-full ${isImg ? 'bg-zinc-900' : `bg-gradient-to-r ${gradient}`}`}
+                    />
+                    <div className="p-3.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-semibold text-white">
+                          {sub.icon || '📚'} {sub.name}
+                        </span>
+                        <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
+                          {sub.kind === 'project' ? 'Projeto' : 'Matéria'}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-400">
+                        <span>{sub.note_count ?? 0} notas</span>
+                        <span>•</span>
+                        <span>{sub.card_count ?? 0} cards</span>
+                        {(sub.due_count ?? 0) > 0 && (
+                          <>
+                            <span>•</span>
+                            <span className="text-amber-300">{sub.due_count} pendentes</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Quizzes Ready */}
+          {quizzes.length > 0 && (
+            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                  <Zap className="h-3.5 w-3.5 text-amber-400" />
+                  Quizzes Recentes
+                </h3>
                 <button
                   type="button"
-                  onClick={() => onNavigate('practice', { quizId: q.id })}
-                  className="min-h-[36px] rounded-lg bg-zinc-100 px-3 text-xs font-semibold text-zinc-950 hover:bg-white"
+                  onClick={() => onNavigate('practice')}
+                  className="text-xs text-cyan-400 hover:text-cyan-300"
                 >
-                  Iniciar
+                  Ver todos →
                 </button>
               </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {quizzes.slice(0, 4).map((q) => (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => onNavigate('practice', { quizId: q.id })}
+                    className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2.5 text-left hover:border-amber-500/40"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-white">{q.title}</p>
+                      <p className="text-[11px] text-zinc-500">{q.subject_name}</p>
+                    </div>
+                    <span className="ml-2 shrink-0 inline-flex items-center gap-1 text-[11px] text-zinc-400">
+                      <Clock className="h-3 w-3" />
+                      {q.last_score_pct !== null ? `${q.last_score_pct}%` : `${q.question_count}Q`}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-          ))}
+          )}
         </div>
-      </section>
+      </div>
     </div>
   );
 }

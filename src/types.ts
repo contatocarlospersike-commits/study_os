@@ -22,6 +22,7 @@ export interface Book {
   summary_markdown: string;
   insights_markdown: string;
   selective_plan_markdown: string;
+  cover_style?: string;
   created_at: string;
   updated_at: string;
 }

@@ -143,6 +143,7 @@ libraryRouter.post('/books', async (req, res) => {
     total_pages = 100,
     summary_markdown = '',
     insights_markdown = '',
+    cover_style = 'aurora',
   } = req.body;
 
   if (!title) {
@@ -154,8 +155,8 @@ libraryRouter.post('/books', async (req, res) => {
   const now = new Date().toISOString();
 
   await execute(
-    `INSERT INTO books (id, user_id, subject_id, title, author, source_type, external_url, status, current_page, total_pages, summary_markdown, insights_markdown, selective_plan_markdown, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)`,
+    `INSERT INTO books (id, user_id, subject_id, title, author, source_type, external_url, status, current_page, total_pages, summary_markdown, insights_markdown, selective_plan_markdown, cover_style, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?)`,
     [
       id,
       req.userId,
@@ -169,6 +170,7 @@ libraryRouter.post('/books', async (req, res) => {
       Math.max(1, Number(total_pages) || 100),
       summary_markdown,
       insights_markdown,
+      cover_style || 'aurora',
       now,
       now,
     ]
@@ -200,12 +202,13 @@ libraryRouter.patch('/books/:id', async (req, res) => {
     insights_markdown,
     external_url,
     subject_id,
+    cover_style,
   } = req.body;
   const now = new Date().toISOString();
 
   await execute(
     `UPDATE books
-     SET status = ?, current_page = ?, total_pages = ?, summary_markdown = ?, insights_markdown = ?, external_url = ?, subject_id = ?, updated_at = ?
+     SET status = ?, current_page = ?, total_pages = ?, summary_markdown = ?, insights_markdown = ?, external_url = ?, subject_id = ?, cover_style = ?, updated_at = ?
      WHERE id = ? AND user_id = ?`,
     [
       status ?? existing.status,
@@ -215,6 +218,7 @@ libraryRouter.patch('/books/:id', async (req, res) => {
       insights_markdown ?? existing.insights_markdown,
       external_url ?? existing.external_url,
       subject_id !== undefined ? subject_id : existing.subject_id,
+      cover_style ?? existing.cover_style ?? 'aurora',
       now,
       req.params.id,
       req.userId,
