@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Film,
   Loader2,
+  Maximize2,
   Pause,
   Play,
   SkipBack,
@@ -102,14 +103,6 @@ const DEMO_30S_LESSON: AnimatedLesson = {
   ],
 };
 
-const NODE_STYLES: Record<string, string> = {
-  core: 'border-indigo-500/50 bg-indigo-500/15 text-indigo-100',
-  analogy: 'border-cyan-500/50 bg-cyan-500/15 text-cyan-100',
-  example: 'border-emerald-500/50 bg-emerald-500/15 text-emerald-100',
-  warning: 'border-rose-500/50 bg-rose-500/15 text-rose-100',
-  connection: 'border-amber-500/50 bg-amber-500/15 text-amber-100',
-};
-
 const NODE_BADGES: Record<string, string> = {
   core: 'Conceito',
   analogy: 'Analogia',
@@ -117,6 +110,237 @@ const NODE_BADGES: Record<string, string> = {
   warning: 'Armadilha',
   connection: 'Conexão',
 };
+
+const NODE_COLORS: Record<string, { stroke: string; fill: string; text: string; glow: string }> = {
+  core: { stroke: '#818cf8', fill: 'rgba(99, 102, 241, 0.16)', text: '#e0e7ff', glow: 'rgba(99, 102, 241, 0.45)' },
+  analogy: { stroke: '#22d3ee', fill: 'rgba(6, 182, 212, 0.16)', text: '#cffafe', glow: 'rgba(34, 211, 238, 0.45)' },
+  example: { stroke: '#34d399', fill: 'rgba(16, 185, 129, 0.16)', text: '#d1fae5', glow: 'rgba(52, 211, 153, 0.45)' },
+  warning: { stroke: '#fb7185', fill: 'rgba(244, 63, 94, 0.16)', text: '#ffe4e6', glow: 'rgba(251, 113, 133, 0.45)' },
+  connection: { stroke: '#fbbf24', fill: 'rgba(245, 158, 11, 0.16)', text: '#fef3c7', glow: 'rgba(251, 191, 36, 0.45)' },
+};
+
+function getNodeCoords(count: number): Array<{ x: number; y: number }> {
+  if (count <= 1) return [{ x: 480, y: 230 }];
+  if (count === 2) {
+    return [
+      { x: 280, y: 235 },
+      { x: 680, y: 235 },
+    ];
+  }
+  if (count === 3) {
+    return [
+      { x: 205, y: 245 },
+      { x: 480, y: 155 },
+      { x: 755, y: 245 },
+    ];
+  }
+  return [
+    { x: 210, y: 155 },
+    { x: 750, y: 155 },
+    { x: 250, y: 315 },
+    { x: 710, y: 315 },
+  ];
+}
+
+function CinematicSceneStage({
+  scene,
+  playing,
+  visibleNodesCount,
+  sceneElapsedSec,
+}: {
+  scene: AnimatedScene;
+  playing: boolean;
+  visibleNodesCount: number;
+  sceneElapsedSec: number;
+}) {
+  const nodes = scene.visual_nodes.slice(0, 4);
+  const coords = getNodeCoords(nodes.length);
+  const coordByLabel = new Map<string, { x: number; y: number; idx: number }>();
+  nodes.forEach((n, idx) => {
+    coordByLabel.set(n.label.toLowerCase().trim(), { ...coords[idx], idx });
+  });
+
+  const sentences = scene.narration
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const progress = Math.min(0.99, sceneElapsedSec / Math.max(4, scene.duration_sec || 10));
+  const activeSentence =
+    sentences[Math.min(sentences.length - 1, Math.floor(progress * sentences.length))] ||
+    scene.narration;
+
+  const activeNodeIdx = playing
+    ? Math.min(nodes.length - 1, Math.max(0, visibleNodesCount - 1))
+    : nodes.length - 1;
+
+  return (
+    <div className="relative aspect-video w-full overflow-hidden bg-[#060913] select-none">
+      {/* Blueprint grid + ambient glow */}
+      <div
+        className="absolute inset-0 opacity-25"
+        style={{
+          backgroundImage:
+            'linear-gradient(to right, rgba(99,102,241,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(99,102,241,0.14) 1px, transparent 1px)',
+          backgroundSize: '36px 36px',
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(circle at 50% 42%, rgba(79,70,229,0.22) 0%, rgba(6,9,19,0.88) 72%)',
+        }}
+      />
+
+      {/* Top HUD */}
+      <div className="relative z-10 flex items-center justify-between px-5 pt-4">
+        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-black/50 px-3 py-1 backdrop-blur-md">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
+          <span className="text-xs font-semibold tracking-wide text-indigo-200">
+            {scene.scene_title}
+          </span>
+        </div>
+        {scene.sources_hint && (
+          <span className="hidden rounded-full bg-black/45 px-2.5 py-1 text-[10px] text-zinc-400 backdrop-blur-sm sm:inline">
+            {scene.sources_hint}
+          </span>
+        )}
+      </div>
+
+      {/* Animated SVG Vector Stage (3Blue1Brown-inspired) */}
+      <svg viewBox="0 0 960 440" className="relative z-10 h-[66%] w-full">
+        <defs>
+          <marker id="arrow-cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+          </marker>
+        </defs>
+
+        {/* Animated Bezier Connections */}
+        {(scene.connections || []).map((c, idx) => {
+          const from = coordByLabel.get(c.from.toLowerCase().trim()) || (coords[idx] ? { ...coords[idx], idx } : null);
+          const to =
+            coordByLabel.get(c.to.toLowerCase().trim()) ||
+            (coords[idx + 1] ? { ...coords[idx + 1], idx: idx + 1 } : null);
+          if (!from || !to) return null;
+
+          const mx = (from.x + to.x) / 2;
+          const my = (from.y + to.y) / 2 - 36;
+          const pathD = `M ${from.x} ${from.y} Q ${mx} ${my} ${to.x} ${to.y}`;
+          const isDrawn = !playing || Math.max(from.idx, to.idx) < visibleNodesCount;
+
+          return (
+            <g key={`conn-${idx}`}>
+              <path
+                d={pathD}
+                fill="none"
+                stroke="#38bdf8"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                markerEnd="url(#arrow-cyan)"
+                style={{
+                  strokeDasharray: 600,
+                  strokeDashoffset: isDrawn ? 0 : 600,
+                  opacity: isDrawn ? 0.85 : 0.1,
+                  transition: 'stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease',
+                }}
+              />
+              {isDrawn && (
+                <g transform={`translate(${mx}, ${my + 12})`}>
+                  <rect x="-46" y="-11" width="92" height="20" rx="10" fill="#0b1224" stroke="#1e293b" strokeWidth="1" />
+                  <text x="0" y="3" textAnchor="middle" fill="#7dd3fc" fontSize="11" fontWeight="600">
+                    {c.label.slice(0, 16)}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+
+        {/* Animated Nodes */}
+        {nodes.map((node, i) => {
+          const pos = coords[i];
+          const palette = NODE_COLORS[node.kind] || NODE_COLORS.core;
+          const visible = !playing || i < visibleNodesCount;
+          const isSpotlight = playing && i === activeNodeIdx;
+
+          return (
+            <g
+              key={`node-${i}`}
+              style={{
+                transform: `translate(${pos.x}px, ${pos.y}px) scale(${
+                  !visible ? 0.78 : isSpotlight ? 1.07 : 1
+                })`,
+                transformOrigin: '0 0',
+                opacity: visible ? 1 : 0.08,
+                transition: 'all 0.55s cubic-bezier(0.22, 1, 0.36, 1)',
+              }}
+            >
+              {isSpotlight && (
+                <rect
+                  x="-118"
+                  y="-58"
+                  width="236"
+                  height="116"
+                  rx="22"
+                  fill="none"
+                  stroke={palette.stroke}
+                  strokeOpacity="0.45"
+                  strokeWidth="3"
+                />
+              )}
+              <rect
+                x="-110"
+                y="-50"
+                width="220"
+                height="100"
+                rx="18"
+                fill="#0b1020"
+                stroke={palette.stroke}
+                strokeWidth={isSpotlight ? '2.5' : '1.6'}
+              />
+              <rect
+                x="-110"
+                y="-50"
+                width="220"
+                height="100"
+                rx="18"
+                fill={palette.fill}
+              />
+              <text
+                x="0"
+                y="-24"
+                textAnchor="middle"
+                fill={palette.stroke}
+                fontSize="10"
+                fontWeight="700"
+                letterSpacing="1.2"
+              >
+                {(NODE_BADGES[node.kind] || 'IDEIA').toUpperCase()}
+              </text>
+              <text x="0" y="0" textAnchor="middle" fill="#ffffff" fontSize="14.5" fontWeight="700">
+                {node.label.slice(0, 24)}
+              </text>
+              <text x="0" y="23" textAnchor="middle" fill={palette.text} fontSize="11" opacity="0.88">
+                {node.detail.slice(0, 34)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Bottom Cinema Subtitle + Key Takeaway */}
+      <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/85 to-transparent px-6 pb-4 pt-8 text-center">
+        <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/15 px-3 py-0.5 text-[11px] font-semibold text-emerald-300">
+          <CheckCircle2 className="h-3 w-3" />
+          {scene.key_takeaway}
+        </div>
+        <p className="mx-auto max-w-2xl text-sm font-medium leading-snug text-white drop-shadow sm:text-base">
+          {activeSentence}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   subjects,
@@ -156,6 +380,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const timerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ttsCacheRef = useRef<Map<string, string>>(new Map());
+  const playerContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!subjectId && subjects[0]?.id) setSubjectId(subjects[0].id);
@@ -651,7 +876,10 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
         {/* Right: Interactive Animated Lesson Player */}
         <div className="lg:col-span-8">
           {activeLesson && currentScene ? (
-            <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+            <div
+              ref={playerContainerRef}
+              className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl"
+            >
               {/* Player Top Bar */}
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/70 px-4 py-3">
                 <div className="min-w-0">
@@ -671,82 +899,39 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
                   <h3 className="truncate text-sm font-bold text-white">{activeLesson.title}</h3>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleSaveToWorkspace}
-                  disabled={savingWorkspace}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-indigo-400 hover:text-white"
-                >
-                  {savingWorkspace ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BookOpen className="h-3.5 w-3.5 text-indigo-400" />}
-                  Enviar para Workspace
-                </button>
-              </div>
-
-              {/* Animated Visual Stage */}
-              <div className="relative min-h-[340px] space-y-5 bg-gradient-to-b from-zinc-950 via-zinc-900/60 to-zinc-950 p-6">
-                <div className="flex items-center justify-between">
-                  <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-300">
-                    {currentScene.scene_title}
-                  </span>
-                  {currentScene.sources_hint && (
-                    <span className="text-[11px] text-zinc-500">Fonte: {currentScene.sources_hint}</span>
-                  )}
-                </div>
-
-                {/* Animated Visual Nodes appearing progressively */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {currentScene.visual_nodes.map((node, i) => {
-                    const visible = !playing || i < visibleNodesCount;
-                    return (
-                      <div
-                        key={i}
-                        className={`rounded-2xl border p-4 transition-all duration-500 ${
-                          NODE_STYLES[node.kind] || NODE_STYLES.core
-                        } ${
-                          visible
-                            ? 'translate-y-0 scale-100 opacity-100'
-                            : 'translate-y-3 scale-95 opacity-15'
-                        }`}
-                      >
-                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-75">
-                          {NODE_BADGES[node.kind] || 'Ideia'}
-                        </span>
-                        <h4 className="mt-1 text-sm font-bold">{node.label}</h4>
-                        <p className="mt-1 text-xs opacity-90">{node.detail}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Animated Connections Pill Flow */}
-                {currentScene.connections && currentScene.connections.length > 0 && (
-                  <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                    {currentScene.connections.map((c, idx) => (
-                      <div
-                        key={idx}
-                        className={`inline-flex items-center gap-1.5 rounded-full border border-zinc-700/80 bg-zinc-900/90 px-3 py-1 text-[11px] transition-all duration-500 ${
-                          !playing || idx < visibleNodesCount
-                            ? 'opacity-100 scale-100'
-                            : 'opacity-20 scale-95'
-                        }`}
-                      >
-                        <span className="font-semibold text-zinc-200">{c.from}</span>
-                        <span className="text-indigo-400">── {c.label} →</span>
-                        <span className="font-semibold text-cyan-300">{c.to}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Key Takeaway + Synced Narration Subtitle */}
-                <div className="space-y-2 rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-300">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    {currentScene.key_takeaway}
-                  </div>
-                  <p className="text-sm leading-relaxed text-zinc-200">{currentScene.narration}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = playerContainerRef.current;
+                      if (!el) return;
+                      if (document.fullscreenElement) void document.exitFullscreen();
+                      else void el.requestFullscreen?.();
+                    }}
+                    className="rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 text-zinc-300 hover:text-white"
+                    title="Tela cheia"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveToWorkspace}
+                    disabled={savingWorkspace}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-indigo-400 hover:text-white"
+                  >
+                    {savingWorkspace ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BookOpen className="h-3.5 w-3.5 text-indigo-400" />}
+                    Enviar para Workspace
+                  </button>
                 </div>
               </div>
+
+              {/* Cinematic 16:9 Vector Animated Video Stage */}
+              <CinematicSceneStage
+                scene={currentScene}
+                playing={playing}
+                visibleNodesCount={visibleNodesCount}
+                sceneElapsedSec={sceneElapsedSec}
+              />
 
               {/* Video Controls */}
               <div className="space-y-3 border-t border-zinc-800 bg-zinc-900/80 px-5 py-3.5">
