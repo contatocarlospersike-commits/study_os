@@ -226,12 +226,23 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const [uploadedMimeType, setUploadedMimeType] = useState<string | undefined>();
 
   const [generating, setGenerating] = useState(false);
+  const [genSeconds, setGenSeconds] = useState(0);
+  const [genError, setGenError] = useState('');
   const [expandingModuleIdx, setExpandingModuleIdx] = useState<number | null>(null);
   const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [speakingSlide, setSpeakingSlide] = useState(false);
 
   const deckContainerRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (!generating) {
+      setGenSeconds(0);
+      return;
+    }
+    const id = setInterval(() => setGenSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [generating]);
 
   useEffect(() => {
     if (!subjectId && subjects[0]?.id) setSubjectId(subjects[0].id);
@@ -359,6 +370,11 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const handlePdfSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 3.2 * 1024 * 1024) {
+      setGenError('PDF acima de 3,2 MB excede o limite da Vercel. Suba na aba Materiais ou envie um PDF menor.');
+      return;
+    }
+    setGenError('');
     setPdfName(file.name);
     const reader = new FileReader();
     reader.onload = () => {
@@ -394,8 +410,13 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (generating) return;
+    setGenError('');
     if (mediaProgress !== null && !uploadedFileUri) {
-      onNotify('Aguarde o envio do vídeo/áudio', 'Espere o upload da mídia concluir antes de gerar os slides.');
+      setGenError('Espere o upload da mídia concluir antes de gerar os slides.');
+      return;
+    }
+    if (!topicHint.trim() && !transcriptText.trim() && !pdfBase64 && !uploadedFileUri && !subjectId) {
+      setGenError('Escolha uma matéria, digite o tema ou suba um arquivo.');
       return;
     }
     setGenerating(true);
@@ -418,7 +439,9 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
         void expandRemainingModules(created, uploadedFileUri, uploadedMimeType);
       }
     } catch (err) {
-      onNotify('Erro ao gerar slides', (err as Error).message);
+      const msg = (err as Error).message || 'Erro ao gerar slides';
+      setGenError(msg);
+      onNotify('Erro ao gerar slides', msg);
     } finally {
       setGenerating(false);
     }
@@ -576,8 +599,14 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {generating ? 'Criando slides didáticos...' : 'Gerar Slides Completos'}
+            {generating ? `Gerando slides... (${genSeconds}s)` : 'Gerar Slides Completos'}
           </button>
+
+          {genError && (
+            <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-2.5 text-xs text-rose-200">
+              {genError}
+            </div>
+          )}
 
           {decks.length > 0 && (
             <div className="space-y-1.5 border-t border-zinc-800 pt-3">

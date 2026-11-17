@@ -1,7 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 const MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.5-flash';
-const DEEP_MODEL = process.env.GEMINI_DEEP_MODEL || 'gemini-2.5-pro';
 
 function getApiKey(): string {
   const apiKey = process.env.GEMINI_API_KEY || '';
@@ -284,20 +283,11 @@ FAÇA DUAS COISAS AGORA:
     },
   };
 
-  let res;
-  try {
-    res = await ai.models.generateContent({
-      model: DEEP_MODEL,
-      contents: contentsPayload,
-      config: configPayload,
-    });
-  } catch {
-    res = await ai.models.generateContent({
-      model: MODEL,
-      contents: contentsPayload,
-      config: configPayload,
-    });
-  }
+  const res = await ai.models.generateContent({
+    model: MODEL,
+    contents: contentsPayload,
+    config: configPayload,
+  });
 
   const parsed = JSON.parse(res.text || '{}') as {
     title?: string;
