@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import crypto from 'node:crypto';
 import { execute, queryAll, queryOne } from '../db.js';
 import {
@@ -11,6 +11,7 @@ import {
 import { runFeynmanWorkflow } from '../services/feynmanPipeline.js';
 import {
   checkGeminiFileStatus,
+  forwardGeminiUploadChunk,
   generateAnimatedLessonInitial,
   generateAnimatedLessonModule,
   generateNeuralSpeechWav,
@@ -399,6 +400,26 @@ cognitiveRouter.post('/media/start-upload', async (req, res) => {
   });
   res.json(result);
 });
+
+cognitiveRouter.post(
+  '/media/upload-chunk',
+  express.raw({ type: 'application/octet-stream', limit: '4mb' }),
+  async (req, res) => {
+    const uploadUrl = typeof req.headers['x-upload-url'] === 'string' ? req.headers['x-upload-url'] : '';
+    const offset = Number(req.headers['x-upload-offset'] || 0);
+    const command =
+      typeof req.headers['x-upload-command'] === 'string' ? req.headers['x-upload-command'] : 'upload, finalize';
+    const chunk = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+
+    if (!uploadUrl || chunk.length === 0) {
+      res.status(400).json({ error: 'Chunk ou x-upload-url ausente.' });
+      return;
+    }
+
+    const result = await forwardGeminiUploadChunk({ uploadUrl, offset, command, chunk });
+    res.json(result);
+  }
+);
 
 cognitiveRouter.get('/media/status', async (req, res) => {
   const name = typeof req.query.name === 'string' ? req.query.name : '';

@@ -401,6 +401,36 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  uploadMediaChunk: async (params: {
+    uploadUrl: string;
+    offset: number;
+    command: 'upload' | 'upload, finalize';
+    chunk: Blob;
+  }): Promise<{ file?: { name?: string; uri?: string } }> => {
+    const authHeaders: Record<string, string> = {};
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token) {
+        authHeaders.Authorization = `Bearer ${data.session.access_token}`;
+      }
+    }
+    const res = await fetch('/api/cognitive/media/upload-chunk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'x-upload-url': params.uploadUrl,
+        'x-upload-offset': String(params.offset),
+        'x-upload-command': params.command,
+        ...authHeaders,
+      },
+      body: params.chunk,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(data.error || `Falha no upload (${res.status})`);
+    }
+    return res.json();
+  },
   checkMediaStatus: (name: string) =>
     request<{ state: string; uri: string; mimeType: string }>(
       `/api/cognitive/media/status?name=${encodeURIComponent(name)}`

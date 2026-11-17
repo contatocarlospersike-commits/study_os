@@ -327,6 +327,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
 
   const uploadSingleFileToGemini = async (file: File, id: string, fallbackMime: string) => {
     const mimeType = file.type || fallbackMime;
+    const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MiB: multiplo de 256 KiB e abaixo do limite de 4.5 MB da Vercel
     try {
       const { uploadUrl } = await api.startMediaUpload({
         filename: file.name,
@@ -334,26 +335,21 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
         size_bytes: file.size,
       });
 
-      const uploadedData = await new Promise<{ file?: { name?: string; uri?: string } }>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('PUT', uploadUrl);
-        xhr.setRequestHeader('X-Goog-Upload-Offset', '0');
-        xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize');
-        xhr.upload.onprogress = (evt) => {
-          if (evt.lengthComputable) {
-            updateAttachment(id, { progress: Math.round((evt.loaded / evt.total) * 100) });
-          }
-        };
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(JSON.parse(xhr.responseText || '{}'));
-          } else {
-            reject(new Error(`Falha no upload (${xhr.status})`));
-          }
-        };
-        xhr.onerror = () => reject(new Error('Erro de rede no upload.'));
-        xhr.send(file);
-      });
+      let uploadedData: { file?: { name?: string; uri?: string } } = {};
+      let offset = 0;
+      while (offset < file.size) {
+        const end = Math.min(offset + CHUNK_SIZE, file.size);
+        const isLast = end >= file.size;
+        const chunk = file.slice(offset, end);
+        uploadedData = await api.uploadMediaChunk({
+          uploadUrl,
+          offset,
+          command: isLast ? 'upload, finalize' : 'upload',
+          chunk,
+        });
+        offset = end;
+        updateAttachment(id, { progress: Math.round((offset / file.size) * 100) });
+      }
 
       const fileName = uploadedData.file?.name;
       let uri = uploadedData.file?.uri;

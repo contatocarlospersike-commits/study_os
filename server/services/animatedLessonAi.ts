@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-const MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.5-flash';
+const MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-2.5-flash';
 
 function getApiKey(): string {
   const apiKey = process.env.GEMINI_API_KEY || '';
@@ -86,6 +86,40 @@ export async function startGeminiResumableUpload(params: {
   }
 
   return { uploadUrl };
+}
+
+export async function forwardGeminiUploadChunk(params: {
+  uploadUrl: string;
+  offset: number;
+  command: string;
+  chunk: Buffer;
+}): Promise<{ file?: { name?: string; uri?: string } }> {
+  if (!params.uploadUrl.startsWith('https://generativelanguage.googleapis.com/upload/')) {
+    throw new Error('uploadUrl inválida.');
+  }
+
+  const res = await fetch(params.uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'X-Goog-Upload-Offset': String(params.offset),
+      'X-Goog-Upload-Command': params.command,
+      'Content-Length': String(params.chunk.length),
+    },
+    body: new Uint8Array(params.chunk),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText);
+    throw new Error(`Falha no upload para o Gemini (${res.status}): ${errText}`);
+  }
+
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as { file?: { name?: string; uri?: string } };
+  } catch {
+    return {};
+  }
 }
 
 export async function checkGeminiFileStatus(fileName: string): Promise<{
