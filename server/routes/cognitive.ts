@@ -16,6 +16,7 @@ import {
   generateAnimatedLessonModule,
   generateNeuralSpeechWav,
   startGeminiResumableUpload,
+  uploadBufferToGemini,
   type AnimatedScene,
   type LessonModule,
 } from '../services/animatedLessonAi.js';
@@ -418,6 +419,56 @@ cognitiveRouter.post(
 
     const result = await forwardGeminiUploadChunk({ uploadUrl, offset, command, chunk });
     res.json(result);
+  }
+);
+
+cognitiveRouter.post(
+  '/media/stage-chunk',
+  express.raw({ type: 'application/octet-stream', limit: '4mb' }),
+  async (req, res) => {
+    const rawUploadId = typeof req.headers['x-upload-id'] === 'string' ? req.headers['x-upload-id'] : '';
+    const chunkIndex = Number(req.headers['x-chunk-index'] || 0);
+    const isLast = req.headers['x-is-last'] === 'true';
+    const rawName = typeof req.headers['x-filename'] === 'string' ? req.headers['x-filename'] : 'arquivo';
+    const filename = decodeURIComponent(rawName);
+    const mimeType = typeof req.headers['x-mime-type'] === 'string' ? req.headers['x-mime-type'] : 'application/octet-stream';
+    const chunk = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+
+    if (!rawUploadId || chunk.length === 0) {
+      res.status(400).json({ error: 'Chunk ou x-upload-id ausente.' });
+      return;
+    }
+
+    const scopedUploadId = `${req.userId}:${rawUploadId}`;
+
+    if (chunkIndex === 0 && isLast) {
+      const uploaded = await uploadBufferToGemini({ filename, mimeType, buffer: chunk });
+      res.json(uploaded);
+      return;
+    }
+
+    if (!isLast) {
+      await execute(`DELETE FROM media_upload_chunks WHERE upload_id = ? AND chunk_index = ?`, [
+        scopedUploadId,
+        chunkIndex,
+      ]);
+      await execute(
+        `INSERT INTO media_upload_chunks (upload_id, chunk_index, data_b64, created_at) VALUES (?, ?, ?, ?)`,
+        [scopedUploadId, chunkIndex, chunk.toString('base64'), new Date().toISOString()]
+      );
+      res.json({ ok: true });
+      return;
+    }
+
+    const prevChunks = await queryAll<{ data_b64: string }>(
+      `SELECT data_b64 FROM media_upload_chunks WHERE upload_id = ? ORDER BY chunk_index ASC`,
+      [scopedUploadId]
+    );
+    await execute(`DELETE FROM media_upload_chunks WHERE upload_id = ?`, [scopedUploadId]);
+
+    const fullBuffer = Buffer.concat([...prevChunks.map((c) => Buffer.from(c.data_b64, 'base64')), chunk]);
+    const uploaded = await uploadBufferToGemini({ filename, mimeType, buffer: fullBuffer });
+    res.json(uploaded);
   }
 );
 

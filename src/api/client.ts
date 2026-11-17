@@ -431,6 +431,40 @@ export const api = {
     }
     return res.json();
   },
+  stageMediaChunk: async (params: {
+    uploadId: string;
+    chunkIndex: number;
+    isLast: boolean;
+    filename: string;
+    mimeType: string;
+    chunk: Blob;
+  }): Promise<{ ok?: boolean; file?: { name?: string; uri?: string } }> => {
+    const authHeaders: Record<string, string> = {};
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token) {
+        authHeaders.Authorization = `Bearer ${data.session.access_token}`;
+      }
+    }
+    const res = await fetch('/api/cognitive/media/stage-chunk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'x-upload-id': params.uploadId,
+        'x-chunk-index': String(params.chunkIndex),
+        'x-is-last': String(params.isLast),
+        'x-filename': encodeURIComponent(params.filename),
+        'x-mime-type': params.mimeType,
+        ...authHeaders,
+      },
+      body: params.chunk,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(data.error || `Falha no upload (${res.status})`);
+    }
+    return res.json();
+  },
   checkMediaStatus: (name: string) =>
     request<{ state: string; uri: string; mimeType: string }>(
       `/api/cognitive/media/status?name=${encodeURIComponent(name)}`

@@ -122,6 +122,24 @@ export async function forwardGeminiUploadChunk(params: {
   }
 }
 
+export async function uploadBufferToGemini(params: {
+  filename: string;
+  mimeType: string;
+  buffer: Buffer;
+}): Promise<{ file?: { name?: string; uri?: string } }> {
+  const { uploadUrl } = await startGeminiResumableUpload({
+    filename: params.filename,
+    mimeType: params.mimeType,
+    sizeBytes: params.buffer.length,
+  });
+  return forwardGeminiUploadChunk({
+    uploadUrl,
+    offset: 0,
+    command: 'upload, finalize',
+    chunk: params.buffer,
+  });
+}
+
 export async function checkGeminiFileStatus(fileName: string): Promise<{
   state: string;
   uri: string;

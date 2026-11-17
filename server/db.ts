@@ -253,6 +253,14 @@ export async function initDatabase(): Promise<void> {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS media_upload_chunks (
+      upload_id TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      data_b64 TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (upload_id, chunk_index)
+    );
+
     CREATE TABLE IF NOT EXISTS document_chunks (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

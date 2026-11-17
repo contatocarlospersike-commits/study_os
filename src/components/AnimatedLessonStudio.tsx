@@ -325,64 +325,26 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
     setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
   };
 
-  const uploadDirectToGoogle = (
-    file: File,
-    uploadUrl: string,
-    onProgress: (pct: number) => void
-  ): Promise<{ file?: { name?: string; uri?: string } }> =>
-    new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', uploadUrl);
-      xhr.setRequestHeader('X-Goog-Upload-Offset', '0');
-      xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize');
-      xhr.upload.onprogress = (evt) => {
-        if (evt.lengthComputable) onProgress(Math.round((evt.loaded / evt.total) * 100));
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            resolve(JSON.parse(xhr.responseText || '{}'));
-          } catch {
-            resolve({});
-          }
-        } else {
-          reject(new Error(`Falha no upload (${xhr.status}): ${xhr.responseText || xhr.statusText}`));
-        }
-      };
-      xhr.onerror = () => reject(new Error('Erro de rede ao enviar direto para o Google Gemini.'));
-      xhr.send(file);
-    });
-
   const uploadSingleFileToGemini = async (file: File, id: string, fallbackMime: string) => {
     const mimeType = file.type || fallbackMime;
-    const PROXY_LIMIT = 3.5 * 1024 * 1024; // <= 3.5 MB vai em 1 unico request pelo backend (sem CORS)
+    const CHUNK_SIZE = 2.5 * 1024 * 1024; // 2.5 MB por request (abaixo do limite de 4.5 MB da Vercel)
     try {
-      const { uploadUrl } = await api.startMediaUpload({
-        filename: file.name,
-        mime_type: mimeType,
-        size_bytes: file.size,
-      });
-
       let uploadedData: { file?: { name?: string; uri?: string } } = {};
-      if (file.size <= PROXY_LIMIT) {
-        uploadedData = await api.uploadMediaChunk({
-          uploadUrl,
-          offset: 0,
-          command: 'upload, finalize',
-          chunk: file,
+      const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const start = chunkIndex * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const isLast = chunkIndex === totalChunks - 1;
+        const chunk = file.slice(start, end);
+        uploadedData = await api.stageMediaChunk({
+          uploadId: id,
+          chunkIndex,
+          isLast,
+          filename: file.name,
+          mimeType,
+          chunk,
         });
-        updateAttachment(id, { progress: 100 });
-      } else {
-        try {
-          uploadedData = await uploadDirectToGoogle(file, uploadUrl, (pct) =>
-            updateAttachment(id, { progress: pct })
-          );
-        } catch {
-          // 1 retry automático caso a conexão oscile
-          uploadedData = await uploadDirectToGoogle(file, uploadUrl, (pct) =>
-            updateAttachment(id, { progress: pct })
-          );
-        }
+        updateAttachment(id, { progress: Math.round(((chunkIndex + 1) / totalChunks) * 100) });
       }
 
       const fileName = uploadedData.file?.name;
