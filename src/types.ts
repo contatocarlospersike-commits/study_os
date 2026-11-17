@@ -492,10 +492,18 @@ export interface AnimatedVisualNode {
 export interface AnimatedScene {
   id: string;
   module_index: number;
+  category?: string;
   scene_title: string;
   slide_layout?: 'hero' | 'concept_cards' | 'diagram_flow' | 'comparison' | 'example_code' | 'trap_alert' | 'recap';
   duration_sec: number;
   narration: string;
+  simple_words?: string;
+  formal_definition?: string;
+  example?: string;
+  common_error?: string;
+  feynman_test?: string;
+  feynman_answer_hint?: string;
+  diagram_svg?: string;
   example_or_code?: string;
   visual_nodes: AnimatedVisualNode[];
   connections: Array<{ from: string; to: string; label: string }>;

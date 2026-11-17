@@ -21,10 +21,18 @@ export interface VisualNode {
 export interface AnimatedScene {
   id: string;
   module_index: number;
+  category?: string;
   scene_title: string;
   slide_layout?: 'hero' | 'concept_cards' | 'diagram_flow' | 'comparison' | 'example_code' | 'trap_alert' | 'recap';
   duration_sec: number;
   narration: string;
+  simple_words?: string;
+  formal_definition?: string;
+  example?: string;
+  common_error?: string;
+  feynman_test?: string;
+  feynman_answer_hint?: string;
+  diagram_svg?: string;
   example_or_code?: string;
   visual_nodes: VisualNode[];
   connections: Array<{ from: string; to: string; label: string }>;
@@ -139,12 +147,20 @@ function buildMultimodalParts(params: {
 const SCENE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
+    category: { type: Type.STRING },
     scene_title: { type: Type.STRING },
     slide_layout: {
       type: Type.STRING,
       enum: ['hero', 'concept_cards', 'diagram_flow', 'comparison', 'example_code', 'trap_alert', 'recap'],
     },
     duration_sec: { type: Type.INTEGER },
+    simple_words: { type: Type.STRING },
+    formal_definition: { type: Type.STRING },
+    example: { type: Type.STRING },
+    common_error: { type: Type.STRING },
+    feynman_test: { type: Type.STRING },
+    feynman_answer_hint: { type: Type.STRING },
+    diagram_svg: { type: Type.STRING },
     narration: { type: Type.STRING },
     example_or_code: { type: Type.STRING },
     visual_nodes: {
@@ -178,9 +194,17 @@ const SCENE_SCHEMA = {
     sources_hint: { type: Type.STRING },
   },
   required: [
+    'category',
     'scene_title',
     'slide_layout',
     'duration_sec',
+    'simple_words',
+    'formal_definition',
+    'example',
+    'common_error',
+    'feynman_test',
+    'feynman_answer_hint',
+    'diagram_svg',
     'narration',
     'example_or_code',
     'visual_nodes',
@@ -211,37 +235,49 @@ export async function generateAnimatedLessonInitial(params: {
   const hasMediaOrPdf = Boolean(params.pdfBase64 || params.fileUri || (params.transcriptText && params.transcriptText.trim().length > 30));
   const effectiveTopic = params.topicHint?.trim() || (hasMediaOrPdf ? 'Conteúdo fiel dos arquivos/materiais enviados' : params.subjectName);
 
+  const feynmanSlideSpec = `ESTRUTURA OBRIGATÓRIA DE CADA SLIDE (PADRÃO FEYNMAN PROFUNDO):
+- "category": Categoria curta em MAIÚSCULAS (ex: "FUNDAMENTOS", "OPERAÇÕES", "APLICAÇÃO").
+- "scene_title": Título claro do conceito do slide.
+- "simple_words": Explicação em palavras simples + analogia concreta do dia a dia (ex: sacola, receita, trânsito) sem jargão.
+- "formal_definition": Definição formal completa + aprofundamento técnico rigoroso (não seja raso!).
+- "example": Exemplo prático resolvido passo a passo à mão ou aplicação real detalhada.
+- "example_or_code": Fórmula matemática destacada, tabela ou trecho de código quando ajudar (ou "" se não precisar).
+- "common_error": Atenção / Erro comum ou pegadinha clássica de prova.
+- "feynman_test": Pergunta direta de Active Recall para o aluno responder sem consultar.
+- "feynman_answer_hint": Gabarito claro e completo para o aluno conferir depois de tentar responder.
+- "diagram_svg": Um código SVG VÁLIDO e LIMPO (<svg viewBox="0 0 460 280" xmlns="http://www.w3.org/2000/svg">...</svg>) desenhando um diagrama ilustrativo específico para ESTE slide (ex: conjuntos de Venn com elementos dentro, fluxos, gráficos, matrizes, caixas conectadas). Use fundo transparente, traços nítidos (#38bdf8, #818cf8, #34d399, #f59e0b, #fb7185) e textos legíveis em #f4f4f5 / #cbd5e1 (font-family="sans-serif").
+- "narration": Síntese falada conectando a analogia, a definição e o exemplo.
+- "key_takeaway": Frase-âncora de resumo do slide.`;
+
   const prompt = isShort
-    ? `Você é um Professor Especialista criando uma apresentação de SLIDES DIDÁTICOS E ILUSTRADOS em português (PT-BR).
+    ? `Você é um Professor Especialista criando uma aula interativa profunda em português (PT-BR).
 Tema / Foco: "${effectiveTopic}".
 Abordagem: ${params.technique}.
 
 REGRA CRÍTICA DE FIDELIDADE:
 - Baseie-se FIELMENTE nos arquivos enviados (PDF/vídeo/áudio/texto abaixo).
-- NUNCA fale sobre "estudo livre", "autodidatismo" ou "técnicas de estudo", a menos que o material enviado seja explicitamente sobre isso. Se o material for Matemática, Cálculo, Programação ou qualquer outra disciplina, ensine EXCLUSIVAMENTE essa disciplina em profundidade, com exemplos resolvidos do dia a dia, passo a passo, analogias claras e armadilhas de prova.
+- NUNCA fale sobre "estudo livre", "autodidatismo" ou "técnicas de estudo", a menos que o material enviado seja explicitamente sobre isso.
 
 CONTEÚDO / ANOTAÇÕES ENVIADAS PELO ALUNO:
 ${params.transcriptText?.slice(0, 14000) || 'Analise integralmente o PDF ou vídeo/áudio anexado.'}
 
-REGRAS DOS SLIDES:
-- Gere ${params.targetMinutes <= 1 ? '4' : '6 a 7'} slides sequenciais muito bem explicados.
-- Em "narration", escreva uma explicação didática rica, clara e profunda (não rasa!), usando exemplos práticos e do dia a dia.
-- Use "example_or_code" para mostrar contas passo a passo, fórmulas ou código quando fizer sentido (ou "" se não precisar).
-- "visual_nodes" são 3 blocos visuais ilustrativos do slide e "connections" ligam os labels exatos quando houver diagrama.`
-    : `Você é um Professor Especialista criando uma APRESENTAÇÃO DE SLIDES COMPLETA E PROFUNDA (estilo Gamma/Keynote, equivalente a ${params.targetMinutes} minutos de aula) em português (PT-BR).
+Gere ${params.targetMinutes <= 1 ? '4' : '6'} slides profundos seguindo:
+${feynmanSlideSpec}`
+    : `Você é um Professor Especialista criando uma AULA INTERATIVA COMPLETA E PROFUNDA (equivalente a ${params.targetMinutes} minutos) em português (PT-BR).
 Tema / Foco: "${effectiveTopic}".
 Abordagem: ${params.technique}.
 
 REGRA CRÍTICA DE FIDELIDADE:
-- Extraia os tópicos REAIS dos arquivos enviados (PDF/vídeo/áudio/texto abaixo) e aprofunde com fontes acadêmicas confiáveis.
-- NUNCA invente aulas genéricas sobre "estudo livre" ou "autodidatismo". Ensine EXCLUSIVAMENTE a matéria/tema real do material enviado (ex: Matemática, Cálculo, Algoritmos, etc.), com exemplos resolvidos passo a passo, aplicações do dia a dia e armadilhas de prova.
+- Extraia os tópicos REAIS dos arquivos enviados e aprofunde com fontes acadêmicas confiáveis.
+- NUNCA invente aulas sobre "estudo livre" ou "autodidatismo". Ensine EXCLUSIVAMENTE a matéria real do material enviado.
 
 CONTEÚDO / ANOTAÇÕES ENVIADAS PELO ALUNO:
 ${params.transcriptText?.slice(0, 14000) || 'Analise integralmente o PDF ou vídeo/áudio anexado.'}
 
 FAÇA DUAS COISAS AGORA:
 1. Divida o conteúdo real em 4 a 6 MÓDULOS progressivos ("modules").
-2. Já gere os 5 primeiros SLIDES profundos e ilustrados ("scenes") do MÓDULO 1 com explicação detalhada, "example_or_code" (contas/exemplos/código quando aplicável), "visual_nodes" e "connections".`;
+2. Já gere os 5 primeiros SLIDES profundos ("scenes") do MÓDULO 1 seguindo:
+${feynmanSlideSpec}`;
 
   const contentsPayload = [
     {
@@ -341,15 +377,14 @@ export async function generateAnimatedLessonModule(params: {
 }): Promise<AnimatedScene[]> {
   const ai = getAi();
   const prompt = `Você continua a aula completa "${params.lessonTitle}" (Técnica: ${params.technique}).
-Agora gere as cenas PROFUNDAS e NÃO RASAS do Módulo ${params.moduleIndex + 1}: "${params.moduleTitle}" (${params.moduleMinutes} minutos).
-Objetivo do módulo: ${params.moduleGoal}
+Agora gere 4 a 5 slides PROFUNDOS do Módulo ${params.moduleIndex + 1}: "${params.moduleTitle}" (${params.moduleMinutes} min).
+Objetivo: ${params.moduleGoal}
 
 CONTEXTO / MATERIAIS:
 ${params.contextText.slice(0, 10000)}
 
-Gere 4 a 5 cenas sequenciais ricas (~${Math.round((params.moduleMinutes * 60) / 4)}s cada cena):
-- Narração detalhada (130-220 palavras por cena) explicando o porquê, exemplos concretos, analogias e rigor técnico, citando fontes confiáveis em "sources_hint".
-- 3 a 4 "visual_nodes" + "connections" conectando os labels exatos dos nós.`;
+Para cada slide preencha rigorosamente:
+- "category", "scene_title", "simple_words" (analogia do dia a dia), "formal_definition" (aprofundamento técnico), "example" (passo a passo), "common_error" (pegadinha), "feynman_test" (pergunta Active Recall), "feynman_answer_hint" (gabarito), "diagram_svg" (<svg viewBox="0 0 460 280" xmlns="http://www.w3.org/2000/svg">...</svg> ilustrativo específico deste conceito com fundo transparente e textos claros #f4f4f5), "narration", "key_takeaway" e "sources_hint".`;
 
   const res = await ai.models.generateContent({
     model: MODEL,

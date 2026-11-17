@@ -5,11 +5,8 @@ import {
   ArrowRight,
   BookOpen,
   CheckCircle2,
-  Code2,
-  GitBranch,
   Layers,
   LayoutTemplate,
-  Lightbulb,
   Loader2,
   Maximize2,
   Sparkles,
@@ -26,21 +23,31 @@ interface AnimatedLessonStudioProps {
   onNotify: (title: string, msg: string) => void;
 }
 
+function sanitizeSvg(raw?: string): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith('<svg')) return null;
+  return trimmed
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/\son\w+="[^"]*"/gi, '')
+    .replace(/\son\w+='[^']*'/gi, '');
+}
+
 const EXAMPLE_DECK: AnimatedLesson = {
   id: 'example-deck',
   subject_id: null,
   subject_name: 'Exemplo Study OS',
-  title: 'Estruturas de Dados: Árvores Binárias & Busca (Aula Completa)',
+  title: 'Teoria dos Conjuntos — Guia Feynman Interativo',
   target_minutes: 15,
-  technique: 'Feynman + Diagramas + Exemplos',
-  source_summary: 'Deck didático completo com intuição, diagrama ilustrado, exemplo prático e armadilhas de prova.',
+  technique: 'Feynman + Diagramas + Active Recall',
+  source_summary: 'Exemplo completo no padrão Feynman com diagramas SVG customizados e teste ativo.',
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
   modules: [
     {
       index: 0,
-      title: 'Fundamentos e Busca Binária',
-      goal: 'Dominar a estrutura, invariante BST e complexidade.',
+      title: 'Fundamentos e Operações',
+      goal: 'Dominar conjuntos, pertinência, subconjuntos e operações.',
       minutes: 15,
       expanded: true,
     },
@@ -49,78 +56,77 @@ const EXAMPLE_DECK: AnimatedLesson = {
     {
       id: 'ex-1',
       module_index: 0,
-      slide_layout: 'hero',
-      scene_title: 'Por que Árvores Binárias existem?',
+      category: 'FUNDAMENTOS',
+      slide_layout: 'diagram_flow',
+      scene_title: 'O que é um conjunto?',
       duration_sec: 120,
-      narration:
-        'Listas são ótimas para guardar em sequência, mas lentas para buscar (O(n)). Tabelas hash buscam em O(1), mas perdem a ordenação. A Árvore Binária de Busca (BST) resolve os dois problemas: mantém tudo ordenado e encontra qualquer item descartando metade das possibilidades a cada passo — exatamente como abrir um dicionário no meio.',
-      visual_nodes: [
-        { label: 'Lista Ordenada', detail: 'Busca binária O(log n), mas inserir custa O(n)', kind: 'warning' },
-        { label: 'Árvore BST', detail: 'Busca, inserção e ordenação eficientes', kind: 'core' },
-        { label: 'Analogia do Dicionário', detail: 'Cada decisão elimina 50% do caminho', kind: 'analogy' },
-      ],
+      simple_words:
+        'Pense numa sacola. Tudo o que está dentro tem algo em comum (ex.: todas são vogais). A sacola é o conjunto; cada coisa dentro dela é um elemento.',
+      formal_definition:
+        'Conjunto é todo agrupamento de objetos bem definidos cujos componentes compartilham uma característica em comum. Conceito primitivo: a ideia usual de coleção.',
+      example:
+        'A = {a, e, i, o, u} é o conjunto das vogais do alfabeto. Conjuntos usam letras MAIÚSCULAS (A, B); elementos usam minúsculas ou algarismos.',
+      common_error:
+        'Não confunda conjunto (A, maiúscula = a sacola) com elemento (a, minúscula = o item dentro).',
+      feynman_test:
+        'Explique em uma frase, sem olhar: o que é conjunto e o que é elemento? Dê um exemplo seu.',
+      feynman_answer_hint:
+        'Conjunto é a coleção/sacola (letra maiúscula) e elemento é cada item que pertence a ela (ex: Dias = {seg, ter, qua...}).',
+      diagram_svg: `<svg viewBox="0 0 460 280" xmlns="http://www.w3.org/2000/svg">
+        <text x="230" y="28" text-anchor="middle" fill="#60a5fa" font-size="16" font-weight="700" font-family="sans-serif">Conjunto A (Vogais)</text>
+        <ellipse cx="230" cy="145" rx="165" ry="95" fill="rgba(59,130,246,0.14)" stroke="#3b82f6" stroke-width="2.5"/>
+        <circle cx="155" cy="135" r="20" fill="#2563eb"/><text x="155" y="140" text-anchor="middle" fill="#fff" font-size="15" font-weight="700" font-family="sans-serif">a</text>
+        <circle cx="230" cy="100" r="20" fill="#2563eb"/><text x="230" y="105" text-anchor="middle" fill="#fff" font-size="15" font-weight="700" font-family="sans-serif">e</text>
+        <circle cx="305" cy="135" r="20" fill="#2563eb"/><text x="305" y="140" text-anchor="middle" fill="#fff" font-size="15" font-weight="700" font-family="sans-serif">i</text>
+        <circle cx="190" cy="188" r="20" fill="#2563eb"/><text x="190" y="193" text-anchor="middle" fill="#fff" font-size="15" font-weight="700" font-family="sans-serif">o</text>
+        <circle cx="275" cy="188" r="20" fill="#2563eb"/><text x="275" y="193" text-anchor="middle" fill="#fff" font-size="15" font-weight="700" font-family="sans-serif">u</text>
+        <circle cx="120" cy="262" r="14" fill="#3f3f46"/><text x="120" y="266" text-anchor="middle" fill="#e4e4e7" font-size="12" font-weight="700" font-family="sans-serif">b</text>
+        <circle cx="160" cy="262" r="14" fill="#3f3f46"/><text x="160" y="266" text-anchor="middle" fill="#e4e4e7" font-size="12" font-weight="700" font-family="sans-serif">k</text>
+        <text x="275" y="266" fill="#fb7185" font-size="12" font-weight="600" font-family="sans-serif">✗ não são vogais → ficam de fora</text>
+      </svg>`,
+      narration: 'Conjunto é a coleção (a sacola) e elementos são os itens dentro dela.',
+      visual_nodes: [],
       connections: [],
-      key_takeaway: 'Árvores trocam uma linha reta por decisões hierárquicas.',
-      sources_hint: 'Cormen (CLRS) · Cap. 12 — Binary Search Trees',
+      key_takeaway: 'Conjuntos (maiúscula) agrupam elementos (minúscula) com uma regra clara.',
+      sources_hint: 'Matemática Elementar · Aula 1',
     },
     {
       id: 'ex-2',
       module_index: 0,
+      category: 'OPERAÇÕES COM CONJUNTOS',
       slide_layout: 'diagram_flow',
-      scene_title: 'A Regra de Ouro (Invariante BST)',
+      scene_title: 'União (A ∪ B) vs Interseção (A ∩ B)',
       duration_sec: 120,
-      narration:
-        'Todo nó em uma Árvore Binária de Busca obedece a uma única regra simples: tudo que é MENOR vai para a subárvore da ESQUERDA, e tudo que é MAIOR vai para a subárvore da DIREITA. Essa regra vale recursivamente para toda a árvore.',
-      visual_nodes: [
-        { label: 'Raiz (50)', detail: 'Ponto de decisão inicial', kind: 'core' },
-        { label: 'Esquerda (< 50)', detail: 'Ex: 20, 30, 42 — sempre menores', kind: 'analogy' },
-        { label: 'Direita (> 50)', detail: 'Ex: 70, 65, 90 — sempre maiores', kind: 'example' },
-      ],
-      connections: [
-        { from: 'Raiz (50)', to: 'Esquerda (< 50)', label: 'menor vai p/ esq' },
-        { from: 'Raiz (50)', to: 'Direita (> 50)', label: 'maior vai p/ dir' },
-      ],
-      key_takeaway: 'Percurso Em-Ordem (Esquerda → Raiz → Direita) sempre imprime ordenado.',
-      sources_hint: 'Sedgewick — Algorithms 4th Ed.',
-    },
-    {
-      id: 'ex-3',
-      module_index: 0,
-      slide_layout: 'example_code',
-      scene_title: 'Na Prática: Busca Recursiva em Python',
-      duration_sec: 120,
-      narration:
-        'Veja como a invariante torna o código elegante e curto. Em cada chamada comparamos o alvo com o nó atual: se for igual, achamos; se for menor, descemos à esquerda; se for maior, descemos à direita.',
-      example_or_code: `def buscar(no, alvo):
-    if no is None or no.valor == alvo:
-        return no
-    if alvo < no.valor:
-        return buscar(no.esq, alvo)
-    return buscar(no.dir, alvo)`,
-      visual_nodes: [
-        { label: 'Caso Base', detail: 'no is None (não achou) ou no.valor == alvo', kind: 'core' },
-        { label: 'Descarte de Metade', detail: 'Apenas 1 ramo é seguido por nível', kind: 'example' },
-      ],
+      simple_words:
+        'União (∪) é juntar as duas sacolas numa só (repetido entra uma vez). Interseção (∩) é ficar só com o que está nas duas ao mesmo tempo.',
+      formal_definition:
+        'A ∪ B = { x | x ∈ A ou x ∈ B } (conectivo lógico OU). A ∩ B = { x | x ∈ A e x ∈ B } (conectivo lógico E).',
+      example:
+        'Se A = {1, 2, 3} e B = {3, 4, 5}, então A ∪ B = {1, 2, 3, 4, 5} e A ∩ B = {3}.',
+      common_error:
+        'Macete: ∪ parece um copo que recebe tudo (OU). ∩ parece uma ponte que só deixa passar quem está nos dois (E). Nunca repita elementos na união.',
+      feynman_test:
+        'Para A = {a, e, i} e B = {i, o, u}, qual é A ∪ B e qual é A ∩ B?',
+      feynman_answer_hint:
+        'A ∪ B = {a, e, i, o, u} (o "i" aparece só 1x) e A ∩ B = {i} (único em comum).',
+      diagram_svg: `<svg viewBox="0 0 460 280" xmlns="http://www.w3.org/2000/svg">
+        <text x="145" y="34" text-anchor="middle" fill="#60a5fa" font-size="15" font-weight="700" font-family="sans-serif">A</text>
+        <text x="315" y="34" text-anchor="middle" fill="#fbbf24" font-size="15" font-weight="700" font-family="sans-serif">B</text>
+        <circle cx="175" cy="130" r="82" fill="rgba(59,130,246,0.22)" stroke="#3b82f6" stroke-width="2.5"/>
+        <circle cx="285" cy="130" r="82" fill="rgba(245,158,11,0.22)" stroke="#f59e0b" stroke-width="2.5"/>
+        <text x="135" y="125" text-anchor="middle" fill="#e4e4e7" font-size="15" font-weight="700" font-family="sans-serif">1  2</text>
+        <text x="230" y="135" text-anchor="middle" fill="#34d399" font-size="20" font-weight="800" font-family="sans-serif">3</text>
+        <text x="325" y="125" text-anchor="middle" fill="#e4e4e7" font-size="15" font-weight="700" font-family="sans-serif">4  5</text>
+        <rect x="45" y="232" width="175" height="34" rx="10" fill="rgba(52,211,153,0.14)" stroke="#34d399"/>
+        <text x="132" y="253" text-anchor="middle" fill="#6ee7b7" font-size="12" font-weight="700" font-family="sans-serif">A ∪ B = {1, 2, 3, 4, 5}</text>
+        <rect x="240" y="232" width="175" height="34" rx="10" fill="rgba(56,189,248,0.14)" stroke="#38bdf8"/>
+        <text x="327" y="253" text-anchor="middle" fill="#7dd3fc" font-size="12" font-weight="700" font-family="sans-serif">A ∩ B = {3}</text>
+      </svg>`,
+      narration: 'União junta tudo (OU) e Interseção pega apenas a sobreposição (E).',
+      visual_nodes: [],
       connections: [],
-      key_takeaway: 'Profundidade máxima = número máximo de comparações.',
-      sources_hint: 'Implementação clássica recursiva O(h)',
-    },
-    {
-      id: 'ex-4',
-      module_index: 0,
-      slide_layout: 'trap_alert',
-      scene_title: 'Armadilhas Clássicas de Prova',
-      duration_sec: 120,
-      narration:
-        'Atenção redobrada ao inserir dados já ordenados (1, 2, 3, 4, 5) em uma BST comum: ela degenera em uma lista ligada inclinada para a direita, fazendo a busca cair de O(log n) para O(n)! É por isso que existem árvores balanceadas como AVL e Rubro-Negra.',
-      visual_nodes: [
-        { label: 'Pegadinha #1', detail: 'BST comum NÃO garante O(log n) no pior caso', kind: 'warning' },
-        { label: 'Pegadinha #2', detail: 'Dados ordenados criam árvore degenerada O(n)', kind: 'warning' },
-        { label: 'Solução Real', detail: 'Rotações AVL / Red-Black mantêm altura O(log n)', kind: 'example' },
-      ],
-      connections: [],
-      key_takeaway: 'Balanceamento é o que protege a performance no pior caso.',
-      sources_hint: 'Provas de Estruturas de Dados',
+      key_takeaway: '∪ = OU (tudo junto, sem repetir) · ∩ = E (só o que é comum).',
+      sources_hint: 'Operações com Conjuntos',
     },
   ],
 };
@@ -231,6 +237,8 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const [expandingModuleIdx, setExpandingModuleIdx] = useState<number | null>(null);
   const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [speakingSlide, setSpeakingSlide] = useState(false);
+  const [feynmanInputs, setFeynmanInputs] = useState<Record<string, string>>({});
+  const [revealedAnswers, setRevealedAnswers] = useState<Record<string, boolean>>({});
 
   const deckContainerRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -712,20 +720,11 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
                 </div>
               </div>
 
-              {/* Editorial Slide Canvas */}
-              <div className="relative min-h-[400px] space-y-5 bg-gradient-to-br from-[#0b0f1d] via-zinc-950 to-[#0d111e] p-6 md:p-8">
+              {/* Feynman 2-Column Interactive Slide Canvas */}
+              <div className="relative space-y-4 bg-gradient-to-br from-[#0b0f1d] via-zinc-950 to-[#0d111e] p-5 md:p-7">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-indigo-300">
-                    {layout === 'trap_alert' ? (
-                      <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
-                    ) : layout === 'example_code' ? (
-                      <Code2 className="h-3.5 w-3.5 text-emerald-400" />
-                    ) : layout === 'diagram_flow' ? (
-                      <GitBranch className="h-3.5 w-3.5 text-cyan-400" />
-                    ) : (
-                      <Lightbulb className="h-3.5 w-3.5 text-amber-400" />
-                    )}
-                    Slide {slideIdx + 1}
+                    {currentSlide.category || `SLIDE ${slideIdx + 1}`}
                   </span>
                   {currentSlide.sources_hint && (
                     <span className="text-[11px] text-zinc-500">Fonte: {currentSlide.sources_hint}</span>
@@ -736,57 +735,149 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
                   {currentSlide.scene_title}
                 </h2>
 
-                <p className="max-w-3xl text-[15px] leading-relaxed text-zinc-200">
-                  {currentSlide.narration}
-                </p>
+                {currentSlide.simple_words || currentSlide.formal_definition || currentSlide.example ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+                      {/* Left Column: Simple Words + Formal Definition + Example */}
+                      <div className="space-y-3 lg:col-span-6">
+                        {currentSlide.simple_words && (
+                          <div className="rounded-xl border border-zinc-800 border-l-4 border-l-blue-500 bg-zinc-900/60 p-3.5">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-blue-400">
+                              Em Palavras Simples (Feynman)
+                            </div>
+                            <p className="mt-1 text-xs leading-relaxed text-zinc-200 sm:text-sm">
+                              {currentSlide.simple_words}
+                            </p>
+                          </div>
+                        )}
 
-                {/* Diagram / Code / Cards depending on slide richness */}
-                {currentSlide.example_or_code && (
-                  <pre className="overflow-x-auto rounded-xl border border-emerald-500/30 bg-[#070b14] p-4 font-mono text-xs leading-relaxed text-emerald-200">
-                    {currentSlide.example_or_code}
-                  </pre>
-                )}
+                        {currentSlide.formal_definition && (
+                          <div className="rounded-xl border border-zinc-800 border-l-4 border-l-zinc-400 bg-zinc-900/60 p-3.5">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">
+                              Definição Formal & Aprofundamento
+                            </div>
+                            <p className="mt-1 text-xs leading-relaxed text-zinc-200 sm:text-sm">
+                              {currentSlide.formal_definition}
+                            </p>
+                          </div>
+                        )}
 
-                {layout === 'diagram_flow' && currentSlide.connections?.length > 0 && (
-                  <SlideIllustration scene={currentSlide} />
-                )}
+                        {currentSlide.example && (
+                          <div className="rounded-xl border border-zinc-800 border-l-4 border-l-emerald-500 bg-zinc-900/60 p-3.5">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                              Exemplo Passo a Passo
+                            </div>
+                            <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-zinc-200 sm:text-sm">
+                              {currentSlide.example}
+                            </p>
+                          </div>
+                        )}
 
-                {currentSlide.visual_nodes.length > 0 && (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    {currentSlide.visual_nodes.map((node, i) => (
-                      <div
-                        key={i}
-                        className={`rounded-xl border p-4 ${
-                          node.kind === 'warning'
-                            ? 'border-rose-500/40 bg-rose-500/10'
-                            : node.kind === 'analogy'
-                              ? 'border-cyan-500/40 bg-cyan-500/10'
-                              : node.kind === 'example'
-                                ? 'border-emerald-500/40 bg-emerald-500/10'
-                                : 'border-indigo-500/40 bg-indigo-500/10'
-                        }`}
-                      >
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                          {node.kind === 'warning'
-                            ? 'Atenção'
-                            : node.kind === 'analogy'
-                              ? 'Analogia'
-                              : node.kind === 'example'
-                                ? 'Exemplo'
-                                : 'Conceito'}
-                        </div>
-                        <h4 className="mt-1 text-sm font-bold text-white">{node.label}</h4>
-                        <p className="mt-1 text-xs leading-relaxed text-zinc-300">{node.detail}</p>
+                        {currentSlide.example_or_code && (
+                          <pre className="overflow-x-auto rounded-xl border border-emerald-500/30 bg-[#070b14] p-3.5 font-mono text-xs leading-relaxed text-emerald-200">
+                            {currentSlide.example_or_code}
+                          </pre>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
 
-                {/* Key Takeaway Callout */}
-                <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs font-medium text-emerald-200">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-                  <span>{currentSlide.key_takeaway}</span>
-                </div>
+                      {/* Right Column: Custom Diagram SVG */}
+                      <div className="flex flex-col justify-between rounded-2xl border border-zinc-800 bg-[#080c17] p-4 lg:col-span-6">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                          Diagrama Ilustrativo
+                        </div>
+                        {sanitizeSvg(currentSlide.diagram_svg) ? (
+                          <div
+                            className="my-auto flex w-full items-center justify-center py-2 [&>svg]:max-h-[290px] [&>svg]:w-full"
+                            dangerouslySetInnerHTML={{
+                              __html: sanitizeSvg(currentSlide.diagram_svg)!,
+                            }}
+                          />
+                        ) : (
+                          <div className="my-auto py-2">
+                            <SlideIllustration scene={currentSlide} />
+                          </div>
+                        )}
+                        <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-[11px] font-medium text-emerald-200">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                          <span>{currentSlide.key_takeaway}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Row: Common Error + Interactive Feynman Test */}
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                      {currentSlide.common_error && (
+                        <div className="rounded-xl border border-zinc-800 border-l-4 border-l-rose-500 bg-rose-500/5 p-3.5">
+                          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-rose-400">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Atenção · Erro Comum
+                          </div>
+                          <p className="mt-1 text-xs leading-relaxed text-zinc-200">
+                            {currentSlide.common_error}
+                          </p>
+                        </div>
+                      )}
+
+                      {currentSlide.feynman_test && (
+                        <div className="space-y-2 rounded-xl border border-zinc-800 border-l-4 border-l-violet-500 bg-violet-500/5 p-3.5">
+                          <div className="text-[11px] font-bold uppercase tracking-wider text-violet-300">
+                            Teste Feynman · Active Recall
+                          </div>
+                          <p className="text-xs leading-relaxed text-zinc-100">
+                            {currentSlide.feynman_test}
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              value={feynmanInputs[currentSlide.id] || ''}
+                              onChange={(e) =>
+                                setFeynmanInputs((p) => ({ ...p, [currentSlide.id]: e.target.value }))
+                              }
+                              placeholder="Escreva sua resposta sem olhar..."
+                              className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none"
+                            />
+                            {currentSlide.feynman_answer_hint && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRevealedAnswers((p) => ({
+                                    ...p,
+                                    [currentSlide.id]: !p[currentSlide.id],
+                                  }))
+                                }
+                                className="shrink-0 rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-500"
+                              >
+                                {revealedAnswers[currentSlide.id] ? 'Ocultar' : 'Ver Gabarito'}
+                              </button>
+                            )}
+                          </div>
+                          {revealedAnswers[currentSlide.id] && currentSlide.feynman_answer_hint && (
+                            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-[11px] text-emerald-200">
+                              <strong>Gabarito:</strong> {currentSlide.feynman_answer_hint}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="max-w-3xl text-[15px] leading-relaxed text-zinc-200">
+                      {currentSlide.narration}
+                    </p>
+                    {currentSlide.example_or_code && (
+                      <pre className="overflow-x-auto rounded-xl border border-emerald-500/30 bg-[#070b14] p-4 font-mono text-xs leading-relaxed text-emerald-200">
+                        {currentSlide.example_or_code}
+                      </pre>
+                    )}
+                    {layout === 'diagram_flow' && currentSlide.connections?.length > 0 && (
+                      <SlideIllustration scene={currentSlide} />
+                    )}
+                    <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs font-medium text-emerald-200">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                      <span>{currentSlide.key_takeaway}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Slide Thumbnails & Controls */}
