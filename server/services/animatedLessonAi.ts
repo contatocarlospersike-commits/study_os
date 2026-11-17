@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 const MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.5-flash';
+const DEEP_MODEL = process.env.GEMINI_DEEP_MODEL || 'gemini-2.5-pro';
 
 function getApiKey(): string {
   const apiKey = process.env.GEMINI_API_KEY || '';
@@ -207,75 +208,96 @@ export async function generateAnimatedLessonInitial(params: {
 }> {
   const ai = getAi();
   const isShort = params.targetMinutes <= 5;
-  const targetSec = Math.max(25, Math.round(params.targetMinutes * 60));
+
+  const hasMediaOrPdf = Boolean(params.pdfBase64 || params.fileUri || (params.transcriptText && params.transcriptText.trim().length > 30));
+  const effectiveTopic = params.topicHint?.trim() || (hasMediaOrPdf ? 'Conteúdo fiel dos arquivos/materiais enviados' : params.subjectName);
 
   const prompt = isShort
-    ? `Você é um Professor Audiovisual de Elite (estilo 3Blue1Brown + Técnica ${params.technique}).
-Crie uma VÍDEO-AULA ANIMADA em português (PT-BR) com duração total aproximada de ${targetSec} segundos sobre "${params.topicHint || params.subjectName}".
-Use os materiais anexados (se houver) E enriqueça com conhecimento acadêmico profundo e fontes confiáveis (cite livros/documentações reais em "sources_hint").
+    ? `Você é um Professor Especialista criando uma apresentação de SLIDES DIDÁTICOS E ILUSTRADOS em português (PT-BR).
+Tema / Foco: "${effectiveTopic}".
+Abordagem: ${params.technique}.
 
-CONTEÚDO / CONTEXTO ADICIONAL:
-${params.transcriptText?.slice(0, 12000) || 'Use o material anexado e referências acadêmicas sólidas.'}
+REGRA CRÍTICA DE FIDELIDADE:
+- Baseie-se FIELMENTE nos arquivos enviados (PDF/vídeo/áudio/texto abaixo).
+- NUNCA fale sobre "estudo livre", "autodidatismo" ou "técnicas de estudo", a menos que o material enviado seja explicitamente sobre isso. Se o material for Matemática, Cálculo, Programação ou qualquer outra disciplina, ensine EXCLUSIVAMENTE essa disciplina em profundidade, com exemplos resolvidos do dia a dia, passo a passo, analogias claras e armadilhas de prova.
 
-REGRAS:
-- Divida em ${params.targetMinutes <= 1 ? '3' : '5 a 6'} cenas sequenciais cuja soma de "duration_sec" dê ~${targetSec}s.
-- Em cada cena, "narration" deve ser exatamente o que a voz vai falar (claro, envolvente, zero superficialidade, explicando com analogias + rigor técnico).
-- "visual_nodes" são os blocos visuais (3 a 4 por cena) que surgem animados na tela enquanto a voz fala.
-- "connections" são as setas que conectam os labels exatos de "visual_nodes" (from -> to).`
-    : `Você é um Arquiteto de Aulas Completas (estilo 3Blue1Brown + Técnica ${params.technique}).
-O aluno quer uma AULA COMPLETA E PROFUNDA de ${params.targetMinutes} minutos (NÃO seja raso!) sobre "${params.topicHint || params.subjectName}".
-Use os materiais anexados + aprofundamento rico de fontes acadêmicas confiáveis.
+CONTEÚDO / ANOTAÇÕES ENVIADAS PELO ALUNO:
+${params.transcriptText?.slice(0, 14000) || 'Analise integralmente o PDF ou vídeo/áudio anexado.'}
 
-CONTEÚDO / CONTEXTO ADICIONAL:
-${params.transcriptText?.slice(0, 14000) || 'Use o material anexado e referências acadêmicas sólidas.'}
+REGRAS DOS SLIDES:
+- Gere ${params.targetMinutes <= 1 ? '4' : '6 a 7'} slides sequenciais muito bem explicados.
+- Em "narration", escreva uma explicação didática rica, clara e profunda (não rasa!), usando exemplos práticos e do dia a dia.
+- Use "example_or_code" para mostrar contas passo a passo, fórmulas ou código quando fizer sentido (ou "" se não precisar).
+- "visual_nodes" são 3 blocos visuais ilustrativos do slide e "connections" ligam os labels exatos quando houver diagrama.`
+    : `Você é um Professor Especialista criando uma APRESENTAÇÃO DE SLIDES COMPLETA E PROFUNDA (estilo Gamma/Keynote, equivalente a ${params.targetMinutes} minutos de aula) em português (PT-BR).
+Tema / Foco: "${effectiveTopic}".
+Abordagem: ${params.technique}.
+
+REGRA CRÍTICA DE FIDELIDADE:
+- Extraia os tópicos REAIS dos arquivos enviados (PDF/vídeo/áudio/texto abaixo) e aprofunde com fontes acadêmicas confiáveis.
+- NUNCA invente aulas genéricas sobre "estudo livre" ou "autodidatismo". Ensine EXCLUSIVAMENTE a matéria/tema real do material enviado (ex: Matemática, Cálculo, Algoritmos, etc.), com exemplos resolvidos passo a passo, aplicações do dia a dia e armadilhas de prova.
+
+CONTEÚDO / ANOTAÇÕES ENVIADAS PELO ALUNO:
+${params.transcriptText?.slice(0, 14000) || 'Analise integralmente o PDF ou vídeo/áudio anexado.'}
 
 FAÇA DUAS COISAS AGORA:
-1. Divida essa aula de ${params.targetMinutes} minutos em 4 a 6 MÓDULOS progressivos ("modules") cuja soma de "minutes" dê ${params.targetMinutes}.
-2. Já gere as cenas detalhadas e profundas ("first_module_scenes": 4 a 5 cenas ricas) apenas do MÓDULO 1 para o aluno já começar a assistir imediatamente!
-Cada cena deve ter narração rica (120-200 palavras por cena, ~50-75s de fala), "visual_nodes" (3-4 blocos), "connections" ligando os labels exatos dos nós, e "sources_hint" com a referência confiável.`;
+1. Divida o conteúdo real em 4 a 6 MÓDULOS progressivos ("modules").
+2. Já gere os 5 primeiros SLIDES profundos e ilustrados ("scenes") do MÓDULO 1 com explicação detalhada, "example_or_code" (contas/exemplos/código quando aplicável), "visual_nodes" e "connections".`;
 
-  const res = await ai.models.generateContent({
-    model: MODEL,
-    contents: [
-      {
-        role: 'user',
-        parts: buildMultimodalParts({
-          prompt,
-          pdfBase64: params.pdfBase64,
-          fileUri: params.fileUri,
-          fileMimeType: params.fileMimeType,
-        }),
-      },
-    ],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          source_summary: { type: Type.STRING },
-          modules: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                index: { type: Type.INTEGER },
-                title: { type: Type.STRING },
-                goal: { type: Type.STRING },
-                minutes: { type: Type.INTEGER },
-              },
-              required: ['index', 'title', 'goal', 'minutes'],
+  const contentsPayload = [
+    {
+      role: 'user',
+      parts: buildMultimodalParts({
+        prompt,
+        pdfBase64: params.pdfBase64,
+        fileUri: params.fileUri,
+        fileMimeType: params.fileMimeType,
+      }),
+    },
+  ];
+  const configPayload = {
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING },
+        source_summary: { type: Type.STRING },
+        modules: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              index: { type: Type.INTEGER },
+              title: { type: Type.STRING },
+              goal: { type: Type.STRING },
+              minutes: { type: Type.INTEGER },
             },
-          },
-          scenes: {
-            type: Type.ARRAY,
-            items: SCENE_SCHEMA,
+            required: ['index', 'title', 'goal', 'minutes'],
           },
         },
-        required: ['title', 'source_summary', 'modules', 'scenes'],
+        scenes: {
+          type: Type.ARRAY,
+          items: SCENE_SCHEMA,
+        },
       },
+      required: ['title', 'source_summary', 'modules', 'scenes'],
     },
-  });
+  };
+
+  let res;
+  try {
+    res = await ai.models.generateContent({
+      model: DEEP_MODEL,
+      contents: contentsPayload,
+      config: configPayload,
+    });
+  } catch {
+    res = await ai.models.generateContent({
+      model: MODEL,
+      contents: contentsPayload,
+      config: configPayload,
+    });
+  }
 
   const parsed = JSON.parse(res.text || '{}') as {
     title?: string;

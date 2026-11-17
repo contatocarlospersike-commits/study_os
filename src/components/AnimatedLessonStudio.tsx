@@ -394,6 +394,10 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (generating) return;
+    if (mediaProgress !== null && !uploadedFileUri) {
+      onNotify('Aguarde o envio do vídeo/áudio', 'Espere o upload da mídia concluir antes de gerar os slides.');
+      return;
+    }
     setGenerating(true);
     try {
       const created = await api.generateAnimatedLesson({

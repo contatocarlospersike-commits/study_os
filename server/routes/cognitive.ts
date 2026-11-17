@@ -450,7 +450,7 @@ cognitiveRouter.post('/animated-lessons/generate', async (req, res) => {
     technique?: string;
   };
 
-  let subjectName = 'Estudo Livre';
+  let subjectName = '';
   let extraContext = transcript_text || '';
   if (subject_id) {
     const sub = await queryOne<{ name: string }>(`SELECT name FROM subjects WHERE id = ? AND user_id = ?`, [
@@ -468,7 +468,7 @@ cognitiveRouter.post('/animated-lessons/generate', async (req, res) => {
   }
 
   const generated = await generateAnimatedLessonInitial({
-    subjectName,
+    subjectName: subjectName || 'Material Enviado',
     topicHint: topic_hint || subjectName,
     transcriptText: extraContext,
     pdfBase64: pdf_base64,
