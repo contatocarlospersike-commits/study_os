@@ -325,9 +325,37 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
     setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
   };
 
+  const uploadDirectToGoogle = (
+    file: File,
+    uploadUrl: string,
+    onProgress: (pct: number) => void
+  ): Promise<{ file?: { name?: string; uri?: string } }> =>
+    new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', uploadUrl);
+      xhr.setRequestHeader('X-Goog-Upload-Offset', '0');
+      xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize');
+      xhr.upload.onprogress = (evt) => {
+        if (evt.lengthComputable) onProgress(Math.round((evt.loaded / evt.total) * 100));
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText || '{}'));
+          } catch {
+            resolve({});
+          }
+        } else {
+          reject(new Error(`Falha no upload (${xhr.status}): ${xhr.responseText || xhr.statusText}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Erro de rede ao enviar direto para o Google Gemini.'));
+      xhr.send(file);
+    });
+
   const uploadSingleFileToGemini = async (file: File, id: string, fallbackMime: string) => {
     const mimeType = file.type || fallbackMime;
-    const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MiB: multiplo de 256 KiB e abaixo do limite de 4.5 MB da Vercel
+    const PROXY_LIMIT = 3.5 * 1024 * 1024; // <= 3.5 MB vai em 1 unico request pelo backend (sem CORS)
     try {
       const { uploadUrl } = await api.startMediaUpload({
         filename: file.name,
@@ -336,19 +364,25 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
       });
 
       let uploadedData: { file?: { name?: string; uri?: string } } = {};
-      let offset = 0;
-      while (offset < file.size) {
-        const end = Math.min(offset + CHUNK_SIZE, file.size);
-        const isLast = end >= file.size;
-        const chunk = file.slice(offset, end);
+      if (file.size <= PROXY_LIMIT) {
         uploadedData = await api.uploadMediaChunk({
           uploadUrl,
-          offset,
-          command: isLast ? 'upload, finalize' : 'upload',
-          chunk,
+          offset: 0,
+          command: 'upload, finalize',
+          chunk: file,
         });
-        offset = end;
-        updateAttachment(id, { progress: Math.round((offset / file.size) * 100) });
+        updateAttachment(id, { progress: 100 });
+      } else {
+        try {
+          uploadedData = await uploadDirectToGoogle(file, uploadUrl, (pct) =>
+            updateAttachment(id, { progress: pct })
+          );
+        } catch {
+          // 1 retry automático caso a conexão oscile
+          uploadedData = await uploadDirectToGoogle(file, uploadUrl, (pct) =>
+            updateAttachment(id, { progress: pct })
+          );
+        }
       }
 
       const fileName = uploadedData.file?.name;
@@ -391,9 +425,11 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
     }));
 
     setAttachments((prev) => [...prev, ...newItems]);
-    files.forEach((file, idx) => {
-      void uploadSingleFileToGemini(file, newItems[idx].id, fallbackMime);
-    });
+    void (async () => {
+      for (let idx = 0; idx < files.length; idx++) {
+        await uploadSingleFileToGemini(files[idx], newItems[idx].id, fallbackMime);
+      }
+    })();
   };
 
   const removeAttachment = (id: string) => {

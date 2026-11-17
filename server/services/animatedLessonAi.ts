@@ -99,7 +99,7 @@ export async function forwardGeminiUploadChunk(params: {
   }
 
   const res = await fetch(params.uploadUrl, {
-    method: 'PUT',
+    method: 'POST',
     headers: {
       'X-Goog-Upload-Offset': String(params.offset),
       'X-Goog-Upload-Command': params.command,
