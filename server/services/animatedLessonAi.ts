@@ -22,8 +22,10 @@ export interface AnimatedScene {
   id: string;
   module_index: number;
   scene_title: string;
+  slide_layout?: 'hero' | 'concept_cards' | 'diagram_flow' | 'comparison' | 'example_code' | 'trap_alert' | 'recap';
   duration_sec: number;
   narration: string;
+  example_or_code?: string;
   visual_nodes: VisualNode[];
   connections: Array<{ from: string; to: string; label: string }>;
   key_takeaway: string;
@@ -138,8 +140,13 @@ const SCENE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     scene_title: { type: Type.STRING },
+    slide_layout: {
+      type: Type.STRING,
+      enum: ['hero', 'concept_cards', 'diagram_flow', 'comparison', 'example_code', 'trap_alert', 'recap'],
+    },
     duration_sec: { type: Type.INTEGER },
     narration: { type: Type.STRING },
+    example_or_code: { type: Type.STRING },
     visual_nodes: {
       type: Type.ARRAY,
       items: {
@@ -172,8 +179,10 @@ const SCENE_SCHEMA = {
   },
   required: [
     'scene_title',
+    'slide_layout',
     'duration_sec',
     'narration',
+    'example_or_code',
     'visual_nodes',
     'connections',
     'key_takeaway',

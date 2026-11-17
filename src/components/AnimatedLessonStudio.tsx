@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
   BookOpen,
   CheckCircle2,
-  Film,
+  Code2,
+  GitBranch,
+  Layers,
+  LayoutTemplate,
+  Lightbulb,
   Loader2,
   Maximize2,
-  Pause,
-  Play,
-  SkipBack,
-  SkipForward,
   Sparkles,
   Trash2,
   Upload,
@@ -23,322 +26,178 @@ interface AnimatedLessonStudioProps {
   onNotify: (title: string, msg: string) => void;
 }
 
-const DEMO_30S_LESSON: AnimatedLesson = {
-  id: 'demo-30s',
+const EXAMPLE_DECK: AnimatedLesson = {
+  id: 'example-deck',
   subject_id: null,
-  subject_name: 'Demonstração Study OS',
-  title: 'Demo 30s: Como Fixar 3x Mais Rápido (Feynman + Conexões)',
-  target_minutes: 0.5,
-  technique: 'Feynman + Conexões Visuais',
-  source_summary: 'Demonstração interativa de 30 segundos com narração sincronizada e conexões animadas.',
+  subject_name: 'Exemplo Study OS',
+  title: 'Estruturas de Dados: Árvores Binárias & Busca (Aula Completa)',
+  target_minutes: 15,
+  technique: 'Feynman + Diagramas + Exemplos',
+  source_summary: 'Deck didático completo com intuição, diagrama ilustrado, exemplo prático e armadilhas de prova.',
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
   modules: [
     {
       index: 0,
-      title: 'Ciclo de Retenção Acelerada',
-      goal: 'Entender por que ouvir + visualizar conexões + testar supera leitura passiva.',
-      minutes: 1,
+      title: 'Fundamentos e Busca Binária',
+      goal: 'Dominar a estrutura, invariante BST e complexidade.',
+      minutes: 15,
       expanded: true,
     },
   ],
   scenes: [
     {
-      id: 'demo-1',
+      id: 'ex-1',
       module_index: 0,
-      scene_title: '1. O Erro da Leitura Passiva',
-      duration_sec: 10,
+      slide_layout: 'hero',
+      scene_title: 'Por que Árvores Binárias existem?',
+      duration_sec: 120,
       narration:
-        'Quando você só lê slides sem parar, seu cérebro cria uma ilusão de fluência. Você reconhece o texto na hora, mas esquece tudo na prova.',
+        'Listas são ótimas para guardar em sequência, mas lentas para buscar (O(n)). Tabelas hash buscam em O(1), mas perdem a ordenação. A Árvore Binária de Busca (BST) resolve os dois problemas: mantém tudo ordenado e encontra qualquer item descartando metade das possibilidades a cada passo — exatamente como abrir um dicionário no meio.',
       visual_nodes: [
-        { label: 'Leitura Passiva', detail: 'Olhar slides sem testar', kind: 'warning' },
-        { label: 'Ilusão de Fluência', detail: 'Parece fácil na hora', kind: 'core' },
-        { label: 'Esquecimento Rápido', detail: 'Curva de Ebbinghaus cai em 24h', kind: 'warning' },
+        { label: 'Lista Ordenada', detail: 'Busca binária O(log n), mas inserir custa O(n)', kind: 'warning' },
+        { label: 'Árvore BST', detail: 'Busca, inserção e ordenação eficientes', kind: 'core' },
+        { label: 'Analogia do Dicionário', detail: 'Cada decisão elimina 50% do caminho', kind: 'analogy' },
       ],
-      connections: [
-        { from: 'Leitura Passiva', to: 'Ilusão de Fluência', label: 'gera' },
-        { from: 'Ilusão de Fluência', to: 'Esquecimento Rápido', label: 'leva a' },
-      ],
-      key_takeaway: 'Reconhecer não é saber explicar.',
-      sources_hint: 'Dunlosky et al. (2013) — Effective Learning Techniques',
+      connections: [],
+      key_takeaway: 'Árvores trocam uma linha reta por decisões hierárquicas.',
+      sources_hint: 'Cormen (CLRS) · Cap. 12 — Binary Search Trees',
     },
     {
-      id: 'demo-2',
+      id: 'ex-2',
       module_index: 0,
-      scene_title: '2. A Ponte Feynman + Visual',
-      duration_sec: 10,
+      slide_layout: 'diagram_flow',
+      scene_title: 'A Regra de Ouro (Invariante BST)',
+      duration_sec: 120,
       narration:
-        'A Técnica de Feynman força você a traduzir um conceito difícil para uma analogia simples do mundo real e desenhar as conexões entre as ideias.',
+        'Todo nó em uma Árvore Binária de Busca obedece a uma única regra simples: tudo que é MENOR vai para a subárvore da ESQUERDA, e tudo que é MAIOR vai para a subárvore da DIREITA. Essa regra vale recursivamente para toda a árvore.',
       visual_nodes: [
-        { label: 'Conceito Técnico', detail: 'Fórmula ou definição formal', kind: 'core' },
-        { label: 'Analogia Real', detail: 'Explicar como para um amigo', kind: 'analogy' },
-        { label: 'Mapa Visual', detail: 'Ligar causa e efeito', kind: 'connection' },
+        { label: 'Raiz (50)', detail: 'Ponto de decisão inicial', kind: 'core' },
+        { label: 'Esquerda (< 50)', detail: 'Ex: 20, 30, 42 — sempre menores', kind: 'analogy' },
+        { label: 'Direita (> 50)', detail: 'Ex: 70, 65, 90 — sempre maiores', kind: 'example' },
       ],
       connections: [
-        { from: 'Conceito Técnico', to: 'Analogia Real', label: 'traduz para' },
-        { from: 'Analogia Real', to: 'Mapa Visual', label: 'conecta em' },
+        { from: 'Raiz (50)', to: 'Esquerda (< 50)', label: 'menor vai p/ esq' },
+        { from: 'Raiz (50)', to: 'Direita (> 50)', label: 'maior vai p/ dir' },
       ],
-      key_takeaway: 'Se você simplifica sem perder o rigor, você dominou.',
-      sources_hint: 'Richard Feynman · Dual Coding Theory (Allan Paivio)',
+      key_takeaway: 'Percurso Em-Ordem (Esquerda → Raiz → Direita) sempre imprime ordenado.',
+      sources_hint: 'Sedgewick — Algorithms 4th Ed.',
     },
     {
-      id: 'demo-3',
+      id: 'ex-3',
       module_index: 0,
-      scene_title: '3. Active Recall Fecha o Ciclo',
-      duration_sec: 10,
+      slide_layout: 'example_code',
+      scene_title: 'Na Prática: Busca Recursiva em Python',
+      duration_sec: 120,
       narration:
-        'Por fim, responder perguntas logo após a aula ativa os neurônios de recuperação e multiplica a retenção de longo prazo.',
+        'Veja como a invariante torna o código elegante e curto. Em cada chamada comparamos o alvo com o nó atual: se for igual, achamos; se for menor, descemos à esquerda; se for maior, descemos à direita.',
+      example_or_code: `def buscar(no, alvo):
+    if no is None or no.valor == alvo:
+        return no
+    if alvo < no.valor:
+        return buscar(no.esq, alvo)
+    return buscar(no.dir, alvo)`,
       visual_nodes: [
-        { label: 'Aula Animada', detail: 'Compreensão visual + voz', kind: 'core' },
-        { label: 'Active Recall', detail: 'Perguntas sem consulta', kind: 'example' },
-        { label: 'Memória Sólida', detail: 'Pronto para a prova', kind: 'connection' },
+        { label: 'Caso Base', detail: 'no is None (não achou) ou no.valor == alvo', kind: 'core' },
+        { label: 'Descarte de Metade', detail: 'Apenas 1 ramo é seguido por nível', kind: 'example' },
       ],
-      connections: [
-        { from: 'Aula Animada', to: 'Active Recall', label: 'valida com' },
-        { from: 'Active Recall', to: 'Memória Sólida', label: 'consolida' },
+      connections: [],
+      key_takeaway: 'Profundidade máxima = número máximo de comparações.',
+      sources_hint: 'Implementação clássica recursiva O(h)',
+    },
+    {
+      id: 'ex-4',
+      module_index: 0,
+      slide_layout: 'trap_alert',
+      scene_title: 'Armadilhas Clássicas de Prova',
+      duration_sec: 120,
+      narration:
+        'Atenção redobrada ao inserir dados já ordenados (1, 2, 3, 4, 5) em uma BST comum: ela degenera em uma lista ligada inclinada para a direita, fazendo a busca cair de O(log n) para O(n)! É por isso que existem árvores balanceadas como AVL e Rubro-Negra.',
+      visual_nodes: [
+        { label: 'Pegadinha #1', detail: 'BST comum NÃO garante O(log n) no pior caso', kind: 'warning' },
+        { label: 'Pegadinha #2', detail: 'Dados ordenados criam árvore degenerada O(n)', kind: 'warning' },
+        { label: 'Solução Real', detail: 'Rotações AVL / Red-Black mantêm altura O(log n)', kind: 'example' },
       ],
-      key_takeaway: 'Estude ativo em blocos curtos e consistentes.',
-      sources_hint: 'Roediger & Karpicke — Testing Effect',
+      connections: [],
+      key_takeaway: 'Balanceamento é o que protege a performance no pior caso.',
+      sources_hint: 'Provas de Estruturas de Dados',
     },
   ],
 };
 
-const NODE_BADGES: Record<string, string> = {
-  core: 'Conceito',
-  analogy: 'Analogia',
-  example: 'Exemplo',
-  warning: 'Armadilha',
-  connection: 'Conexão',
-};
-
-const NODE_COLORS: Record<string, { stroke: string; fill: string; text: string; glow: string }> = {
-  core: { stroke: '#818cf8', fill: 'rgba(99, 102, 241, 0.16)', text: '#e0e7ff', glow: 'rgba(99, 102, 241, 0.45)' },
-  analogy: { stroke: '#22d3ee', fill: 'rgba(6, 182, 212, 0.16)', text: '#cffafe', glow: 'rgba(34, 211, 238, 0.45)' },
-  example: { stroke: '#34d399', fill: 'rgba(16, 185, 129, 0.16)', text: '#d1fae5', glow: 'rgba(52, 211, 153, 0.45)' },
-  warning: { stroke: '#fb7185', fill: 'rgba(244, 63, 94, 0.16)', text: '#ffe4e6', glow: 'rgba(251, 113, 133, 0.45)' },
-  connection: { stroke: '#fbbf24', fill: 'rgba(245, 158, 11, 0.16)', text: '#fef3c7', glow: 'rgba(251, 191, 36, 0.45)' },
-};
-
-function getNodeCoords(count: number): Array<{ x: number; y: number }> {
-  if (count <= 1) return [{ x: 480, y: 230 }];
-  if (count === 2) {
-    return [
-      { x: 280, y: 235 },
-      { x: 680, y: 235 },
-    ];
-  }
-  if (count === 3) {
-    return [
-      { x: 205, y: 245 },
-      { x: 480, y: 155 },
-      { x: 755, y: 245 },
-    ];
-  }
-  return [
-    { x: 210, y: 155 },
-    { x: 750, y: 155 },
-    { x: 250, y: 315 },
-    { x: 710, y: 315 },
-  ];
-}
-
-function CinematicSceneStage({
-  scene,
-  playing,
-  visibleNodesCount,
-  sceneElapsedSec,
-}: {
-  scene: AnimatedScene;
-  playing: boolean;
-  visibleNodesCount: number;
-  sceneElapsedSec: number;
-}) {
-  const nodes = scene.visual_nodes.slice(0, 4);
-  const coords = getNodeCoords(nodes.length);
-  const coordByLabel = new Map<string, { x: number; y: number; idx: number }>();
-  nodes.forEach((n, idx) => {
-    coordByLabel.set(n.label.toLowerCase().trim(), { ...coords[idx], idx });
-  });
-
-  const sentences = scene.narration
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const progress = Math.min(0.99, sceneElapsedSec / Math.max(4, scene.duration_sec || 10));
-  const activeSentence =
-    sentences[Math.min(sentences.length - 1, Math.floor(progress * sentences.length))] ||
-    scene.narration;
-
-  const activeNodeIdx = playing
-    ? Math.min(nodes.length - 1, Math.max(0, visibleNodesCount - 1))
-    : nodes.length - 1;
+function SlideIllustration({ scene }: { scene: AnimatedScene }) {
+  const nodes = scene.visual_nodes.slice(0, 3);
+  const coords =
+    nodes.length === 1
+      ? [{ x: 260, y: 120 }]
+      : nodes.length === 2
+        ? [
+            { x: 140, y: 120 },
+            { x: 380, y: 120 },
+          ]
+        : [
+            { x: 260, y: 58 },
+            { x: 125, y: 175 },
+            { x: 395, y: 175 },
+          ];
+  const mapByLabel = new Map<string, { x: number; y: number }>();
+  nodes.forEach((n, i) => mapByLabel.set(n.label.toLowerCase().trim(), coords[i]));
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden bg-[#060913] select-none">
-      {/* Blueprint grid + ambient glow */}
-      <div
-        className="absolute inset-0 opacity-25"
-        style={{
-          backgroundImage:
-            'linear-gradient(to right, rgba(99,102,241,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(99,102,241,0.14) 1px, transparent 1px)',
-          backgroundSize: '36px 36px',
-        }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(circle at 50% 42%, rgba(79,70,229,0.22) 0%, rgba(6,9,19,0.88) 72%)',
-        }}
-      />
-
-      {/* Top HUD */}
-      <div className="relative z-10 flex items-center justify-between px-5 pt-4">
-        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-black/50 px-3 py-1 backdrop-blur-md">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
-          <span className="text-xs font-semibold tracking-wide text-indigo-200">
-            {scene.scene_title}
-          </span>
-        </div>
-        {scene.sources_hint && (
-          <span className="hidden rounded-full bg-black/45 px-2.5 py-1 text-[10px] text-zinc-400 backdrop-blur-sm sm:inline">
-            {scene.sources_hint}
-          </span>
-        )}
-      </div>
-
-      {/* Animated SVG Vector Stage (3Blue1Brown-inspired) */}
-      <svg viewBox="0 0 960 440" className="relative z-10 h-[66%] w-full">
-        <defs>
-          <marker id="arrow-cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
-          </marker>
-        </defs>
-
-        {/* Animated Bezier Connections */}
-        {(scene.connections || []).map((c, idx) => {
-          const from = coordByLabel.get(c.from.toLowerCase().trim()) || (coords[idx] ? { ...coords[idx], idx } : null);
-          const to =
-            coordByLabel.get(c.to.toLowerCase().trim()) ||
-            (coords[idx + 1] ? { ...coords[idx + 1], idx: idx + 1 } : null);
-          if (!from || !to) return null;
-
-          const mx = (from.x + to.x) / 2;
-          const my = (from.y + to.y) / 2 - 36;
-          const pathD = `M ${from.x} ${from.y} Q ${mx} ${my} ${to.x} ${to.y}`;
-          const isDrawn = !playing || Math.max(from.idx, to.idx) < visibleNodesCount;
-
-          return (
-            <g key={`conn-${idx}`}>
-              <path
-                d={pathD}
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                markerEnd="url(#arrow-cyan)"
-                style={{
-                  strokeDasharray: 600,
-                  strokeDashoffset: isDrawn ? 0 : 600,
-                  opacity: isDrawn ? 0.85 : 0.1,
-                  transition: 'stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease',
-                }}
-              />
-              {isDrawn && (
-                <g transform={`translate(${mx}, ${my + 12})`}>
-                  <rect x="-46" y="-11" width="92" height="20" rx="10" fill="#0b1224" stroke="#1e293b" strokeWidth="1" />
-                  <text x="0" y="3" textAnchor="middle" fill="#7dd3fc" fontSize="11" fontWeight="600">
-                    {c.label.slice(0, 16)}
-                  </text>
-                </g>
-              )}
-            </g>
-          );
-        })}
-
-        {/* Animated Nodes */}
-        {nodes.map((node, i) => {
-          const pos = coords[i];
-          const palette = NODE_COLORS[node.kind] || NODE_COLORS.core;
-          const visible = !playing || i < visibleNodesCount;
-          const isSpotlight = playing && i === activeNodeIdx;
-
-          return (
-            <g
-              key={`node-${i}`}
-              style={{
-                transform: `translate(${pos.x}px, ${pos.y}px) scale(${
-                  !visible ? 0.78 : isSpotlight ? 1.07 : 1
-                })`,
-                transformOrigin: '0 0',
-                opacity: visible ? 1 : 0.08,
-                transition: 'all 0.55s cubic-bezier(0.22, 1, 0.36, 1)',
-              }}
-            >
-              {isSpotlight && (
-                <rect
-                  x="-118"
-                  y="-58"
-                  width="236"
-                  height="116"
-                  rx="22"
-                  fill="none"
-                  stroke={palette.stroke}
-                  strokeOpacity="0.45"
-                  strokeWidth="3"
-                />
-              )}
-              <rect
-                x="-110"
-                y="-50"
-                width="220"
-                height="100"
-                rx="18"
-                fill="#0b1020"
-                stroke={palette.stroke}
-                strokeWidth={isSpotlight ? '2.5' : '1.6'}
-              />
-              <rect
-                x="-110"
-                y="-50"
-                width="220"
-                height="100"
-                rx="18"
-                fill={palette.fill}
-              />
-              <text
-                x="0"
-                y="-24"
-                textAnchor="middle"
-                fill={palette.stroke}
-                fontSize="10"
-                fontWeight="700"
-                letterSpacing="1.2"
-              >
-                {(NODE_BADGES[node.kind] || 'IDEIA').toUpperCase()}
-              </text>
-              <text x="0" y="0" textAnchor="middle" fill="#ffffff" fontSize="14.5" fontWeight="700">
-                {node.label.slice(0, 24)}
-              </text>
-              <text x="0" y="23" textAnchor="middle" fill={palette.text} fontSize="11" opacity="0.88">
-                {node.detail.slice(0, 34)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-
-      {/* Bottom Cinema Subtitle + Key Takeaway */}
-      <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/85 to-transparent px-6 pb-4 pt-8 text-center">
-        <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/15 px-3 py-0.5 text-[11px] font-semibold text-emerald-300">
-          <CheckCircle2 className="h-3 w-3" />
-          {scene.key_takeaway}
-        </div>
-        <p className="mx-auto max-w-2xl text-sm font-medium leading-snug text-white drop-shadow sm:text-base">
-          {activeSentence}
-        </p>
-      </div>
-    </div>
+    <svg viewBox="0 0 520 240" className="w-full rounded-xl border border-zinc-800/80 bg-[#080c17]">
+      <defs>
+        <marker id="slide-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+        </marker>
+      </defs>
+      {(scene.connections || []).map((c, idx) => {
+        const from = mapByLabel.get(c.from.toLowerCase().trim()) || coords[0];
+        const to = mapByLabel.get(c.to.toLowerCase().trim()) || coords[Math.min(idx + 1, coords.length - 1)];
+        if (!from || !to) return null;
+        const mx = (from.x + to.x) / 2;
+        const my = (from.y + to.y) / 2 - 12;
+        return (
+          <g key={idx}>
+            <line
+              x1={from.x}
+              y1={from.y}
+              x2={to.x}
+              y2={to.y}
+              stroke="#38bdf8"
+              strokeWidth="2"
+              strokeOpacity="0.7"
+              markerEnd="url(#slide-arrow)"
+            />
+            <rect x={mx - 42} y={my - 9} width="84" height="18" rx="9" fill="#0f172a" stroke="#1e293b" />
+            <text x={mx} y={my + 3} textAnchor="middle" fill="#7dd3fc" fontSize="9.5" fontWeight="600">
+              {c.label.slice(0, 16)}
+            </text>
+          </g>
+        );
+      })}
+      {nodes.map((n, i) => {
+        const p = coords[i];
+        const stroke =
+          n.kind === 'warning'
+            ? '#fb7185'
+            : n.kind === 'analogy'
+              ? '#22d3ee'
+              : n.kind === 'example'
+                ? '#34d399'
+                : '#818cf8';
+        return (
+          <g key={i} transform={`translate(${p.x}, ${p.y})`}>
+            <rect x="-86" y="-28" width="172" height="56" rx="12" fill="#0f172a" stroke={stroke} strokeWidth="1.6" />
+            <text x="0" y="-4" textAnchor="middle" fill="#ffffff" fontSize="11.5" fontWeight="700">
+              {n.label.slice(0, 22)}
+            </text>
+            <text x="0" y="14" textAnchor="middle" fill="#a1a1aa" fontSize="9.5">
+              {n.detail.slice(0, 28)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
@@ -346,15 +205,16 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   subjects,
   onNotify,
 }) => {
-  const [lessons, setLessons] = useState<AnimatedLesson[]>([]);
-  const [activeLesson, setActiveLesson] = useState<AnimatedLesson | null>(null);
+  const [decks, setDecks] = useState<AnimatedLesson[]>([]);
+  const [activeDeck, setActiveDeck] = useState<AnimatedLesson | null>(null);
+  const [slideIdx, setSlideIdx] = useState(0);
 
-  // Form state
+  // Form
   const [subjectId, setSubjectId] = useState<string>(subjects[0]?.id || '');
   const [topicHint, setTopicHint] = useState('');
   const [transcriptText, setTranscriptText] = useState('');
   const [targetMinutes, setTargetMinutes] = useState<number>(30);
-  const [technique, setTechnique] = useState('Feynman + Conexões Visuais');
+  const [technique, setTechnique] = useState('Feynman + Diagramas + Exemplos');
   const [pdfBase64, setPdfBase64] = useState<string | undefined>();
   const [pdfName, setPdfName] = useState('');
 
@@ -368,19 +228,10 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const [generating, setGenerating] = useState(false);
   const [expandingModuleIdx, setExpandingModuleIdx] = useState<number | null>(null);
   const [savingWorkspace, setSavingWorkspace] = useState(false);
+  const [speakingSlide, setSpeakingSlide] = useState(false);
 
-  // Player state
-  const [sceneIdx, setSceneIdx] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [rate, setRate] = useState(1.1);
-  const [voiceName, setVoiceName] = useState<'Puck' | 'Kore' | 'Aoede'>('Puck');
-  const [visibleNodesCount, setVisibleNodesCount] = useState(1);
-  const [sceneElapsedSec, setSceneElapsedSec] = useState(0);
-  const timerRef = useRef<number | null>(null);
+  const deckContainerRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const ttsCacheRef = useRef<Map<string, string>>(new Map());
-  const playerContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!subjectId && subjects[0]?.id) setSubjectId(subjects[0].id);
@@ -390,141 +241,68 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
     api
       .getAnimatedLessons()
       .then((list) => {
-        setLessons(list);
-        if (list[0]) setActiveLesson(list[0]);
+        setDecks(list);
+        if (list[0]) setActiveDeck(list[0]);
       })
       .catch(() => {});
   }, []);
 
-  const stopSpeech = () => {
+  const slides = activeDeck?.scenes || [];
+  const currentSlide: AnimatedScene | undefined = slides[slideIdx];
+
+  // Keyboard navigation
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!activeDeck) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
+      if (e.key === 'ArrowRight') setSlideIdx((i) => Math.min(slides.length - 1, i + 1));
+      if (e.key === 'ArrowLeft') setSlideIdx((i) => Math.max(0, i - 1));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeDeck, slides.length]);
+
+  const stopAudio = () => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.currentTime = 0;
       audioRef.current = null;
     }
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-    if (timerRef.current) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+    if ('speechSynthesis' in globalThis) globalThis.speechSynthesis.cancel();
+    setSpeakingSlide(false);
   };
 
   useEffect(() => {
-    return () => stopSpeech();
-  }, []);
+    stopAudio();
+  }, [slideIdx, activeDeck?.id]);
 
-  const scenes = activeLesson?.scenes || [];
-  const currentScene: AnimatedScene | undefined = scenes[sceneIdx];
-
-  // Helper: fetch or return cached Neural TTS WAV URL
-  const getNeuralAudioUrl = async (scene: AnimatedScene, voice: string): Promise<string> => {
-    const key = `${scene.id}:${voice}`;
-    const existing = ttsCacheRef.current.get(key);
-    if (existing) return existing;
-    const res = await api.generateTts({ text: scene.narration, voice });
-    const bin = atob(res.audio_base64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const url = URL.createObjectURL(new Blob([bytes], { type: res.mime_type || 'audio/wav' }));
-    ttsCacheRef.current.set(key, url);
-    return url;
-  };
-
-  // Synchronized animation + Neural Gemini TTS (with natural browser voice fallback)
-  useEffect(() => {
-    stopSpeech();
-    if (!playing || !currentScene) return;
-
-    let cancelled = false;
-    setSceneElapsedSec(0);
-    setVisibleNodesCount(1);
-
-    const totalNodes = Math.max(1, currentScene.visual_nodes.length);
-    const totalSec = Math.max(6, currentScene.duration_sec || 10);
-    const stepMs = Math.max(1200, Math.floor((totalSec * 1000) / (totalNodes + 0.5) / rate));
-
-    const nodeTimer = window.setInterval(() => {
-      setVisibleNodesCount((c) => (c < totalNodes ? c + 1 : c));
-    }, stepMs);
-
-    const secTimer = window.setInterval(() => {
-      setSceneElapsedSec((s) => s + 1);
-    }, 1000);
-    timerRef.current = secTimer;
-
-    let fallbackTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    const advanceNext = () => {
-      if (cancelled) return;
-      if (sceneIdx + 1 < scenes.length) {
-        setSceneIdx((i) => i + 1);
-      } else {
-        setPlaying(false);
-      }
-    };
-
-    const speakBrowserNatural = () => {
-      if (cancelled) return;
-      if ('speechSynthesis' in globalThis) {
-        const voices = globalThis.speechSynthesis.getVoices();
-        const ptVoices = voices.filter((v) => v.lang.toLowerCase().startsWith('pt'));
-        const preferred =
-          ptVoices.find((v) => /google|natural|neural|luciana|francisca|thalita|antonio/i.test(v.name)) ||
-          ptVoices[0];
-        const utter = new SpeechSynthesisUtterance(currentScene.narration);
-        utter.lang = 'pt-BR';
-        if (preferred) utter.voice = preferred;
-        utter.rate = rate;
-        utter.pitch = 1.04;
-        utter.onend = () => advanceNext();
-        utter.onerror = () => {
-          fallbackTimeout = setTimeout(advanceNext, Math.round((totalSec * 1000) / rate));
-        };
-        globalThis.speechSynthesis.speak(utter);
-      } else {
-        fallbackTimeout = setTimeout(advanceNext, Math.round((totalSec * 1000) / rate));
-      }
-    };
-
-    if (!muted) {
-      getNeuralAudioUrl(currentScene, voiceName)
-        .then((url) => {
-          if (cancelled) return;
-          const audio = new Audio(url);
-          audio.playbackRate = rate;
-          audioRef.current = audio;
-          audio.onended = () => advanceNext();
-          audio.onerror = () => speakBrowserNatural();
-          void audio.play().catch(() => speakBrowserNatural());
-
-          // Pre-warm next scene TTS in background for zero gap
-          const nextSc = scenes[sceneIdx + 1];
-          if (nextSc) void getNeuralAudioUrl(nextSc, voiceName).catch(() => {});
-        })
-        .catch(() => {
-          speakBrowserNatural();
-        });
-    } else {
-      fallbackTimeout = setTimeout(advanceNext, Math.round((totalSec * 1000) / rate));
+  const handleToggleReadSlide = async () => {
+    if (!currentSlide) return;
+    if (speakingSlide) {
+      stopAudio();
+      return;
     }
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(nodeTimer);
-      window.clearInterval(secTimer);
-      if (fallbackTimeout) window.clearTimeout(fallbackTimeout);
-      stopSpeech();
-    };
-  }, [playing, sceneIdx, currentScene?.id, muted, rate, voiceName, scenes.length]);
+    setSpeakingSlide(true);
+    try {
+      const res = await api.generateTts({ text: currentSlide.narration, voice: 'Kore' });
+      const bin = atob(res.audio_base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: res.mime_type || 'audio/wav' }));
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => setSpeakingSlide(false);
+      await audio.play();
+    } catch {
+      setSpeakingSlide(false);
+    }
+  };
 
   const handleMediaSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setMediaFileName(file.name);
     setMediaProgress(0);
-    setMediaStatusText('Iniciando upload direto para o Google Gemini...');
+    setMediaStatusText('Enviando direto para o Google Gemini...');
     setUploadedFileUri(undefined);
 
     try {
@@ -535,37 +313,29 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
         size_bytes: file.size,
       });
 
-      const uploadedData = await new Promise<{ file?: { name?: string; uri?: string; mimeType?: string } }>(
-        (resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open('PUT', uploadUrl);
-          xhr.setRequestHeader('X-Goog-Upload-Offset', '0');
-          xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize');
-          xhr.upload.onprogress = (evt) => {
-            if (evt.lengthComputable) {
-              setMediaProgress(Math.round((evt.loaded / evt.total) * 100));
-            }
-          };
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                resolve(JSON.parse(xhr.responseText || '{}'));
-              } catch {
-                resolve({});
-              }
-            } else {
-              reject(new Error(`Falha no upload direto (${xhr.status})`));
-            }
-          };
-          xhr.onerror = () => reject(new Error('Erro de rede ao enviar vídeo/áudio.'));
-          xhr.send(file);
-        }
-      );
+      const uploadedData = await new Promise<{ file?: { name?: string; uri?: string } }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', uploadUrl);
+        xhr.setRequestHeader('X-Goog-Upload-Offset', '0');
+        xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize');
+        xhr.upload.onprogress = (evt) => {
+          if (evt.lengthComputable) setMediaProgress(Math.round((evt.loaded / evt.total) * 100));
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText || '{}'));
+          } else {
+            reject(new Error(`Falha no upload (${xhr.status})`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Erro de rede no upload.'));
+        xhr.send(file);
+      });
 
       const fileName = uploadedData.file?.name;
       let uri = uploadedData.file?.uri;
       if (fileName) {
-        setMediaStatusText('Processando áudio/vídeo no Gemini...');
+        setMediaStatusText('Processando no Gemini...');
         for (let i = 0; i < 15; i++) {
           const st = await api.checkMediaStatus(fileName);
           if (st.state === 'ACTIVE') {
@@ -575,15 +345,14 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
           await new Promise((r) => setTimeout(r, 2000));
         }
       }
-
-      if (!uri) throw new Error('Arquivo enviado, mas URI não retornada.');
+      if (!uri) throw new Error('URI de mídia indisponível.');
       setUploadedFileUri(uri);
       setUploadedMimeType(mimeType);
-      setMediaStatusText('Mídia pronta para análise pela IA!');
+      setMediaStatusText('Mídia pronta!');
     } catch (err) {
       setMediaStatusText('');
       setMediaProgress(null);
-      onNotify('Erro no upload de mídia', (err as Error).message);
+      onNotify('Erro no upload', (err as Error).message);
     }
   };
 
@@ -599,25 +368,21 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const expandRemainingModules = async (lesson: AnimatedLesson, fileUri?: string, mime?: string) => {
-    for (const mod of lesson.modules) {
+  const expandRemainingModules = async (deck: AnimatedLesson, fileUri?: string, mime?: string) => {
+    for (const mod of deck.modules) {
       if (mod.expanded) continue;
       setExpandingModuleIdx(mod.index);
       try {
-        const res = await api.expandAnimatedLessonModule(lesson.id, {
+        const res = await api.expandAnimatedLessonModule(deck.id, {
           module_index: mod.index,
           file_uri: fileUri,
           file_mime_type: mime,
         });
-        setActiveLesson((prev) =>
-          prev && prev.id === lesson.id
-            ? { ...prev, modules: res.modules, scenes: res.scenes }
-            : prev
+        setActiveDeck((prev) =>
+          prev && prev.id === deck.id ? { ...prev, modules: res.modules, scenes: res.scenes } : prev
         );
-        setLessons((prev) =>
-          prev.map((l) =>
-            l.id === lesson.id ? { ...l, modules: res.modules, scenes: res.scenes } : l
-          )
+        setDecks((prev) =>
+          prev.map((d) => (d.id === deck.id ? { ...d, modules: res.modules, scenes: res.scenes } : d))
         );
       } catch {
         break;
@@ -629,13 +394,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (generating) return;
-    if (!topicHint.trim() && !transcriptText.trim() && !pdfBase64 && !uploadedFileUri && !subjectId) {
-      onNotify('Informe um conteúdo', 'Escolha a matéria, tema ou suba um arquivo.');
-      return;
-    }
     setGenerating(true);
-    stopSpeech();
-    setPlaying(false);
     try {
       const created = await api.generateAnimatedLesson({
         subject_id: subjectId || null,
@@ -647,43 +406,34 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
         target_minutes: targetMinutes,
         technique,
       });
-      setLessons((prev) => [created, ...prev]);
-      setActiveLesson(created);
-      setSceneIdx(0);
-      setPlaying(true);
-      onNotify('Aula animada iniciada!', 'O Módulo 1 já está pronto — os demais carregam em segundo plano.');
+      setDecks((prev) => [created, ...prev]);
+      setActiveDeck(created);
+      setSlideIdx(0);
+      onNotify('Slides gerados!', 'Os primeiros slides já estão prontos — demais módulos carregam em segundo plano.');
       if (created.modules.some((m) => !m.expanded)) {
         void expandRemainingModules(created, uploadedFileUri, uploadedMimeType);
       }
     } catch (err) {
-      onNotify('Erro ao gerar aula animada', (err as Error).message);
+      onNotify('Erro ao gerar slides', (err as Error).message);
     } finally {
       setGenerating(false);
     }
   };
 
-  const handlePlayDemo30s = () => {
-    stopSpeech();
-    setActiveLesson(DEMO_30S_LESSON);
-    setSceneIdx(0);
-    setVisibleNodesCount(1);
-    setPlaying(true);
-  };
-
   const handleSaveToWorkspace = async () => {
-    if (!activeLesson || activeLesson.id === 'demo-30s') {
-      onNotify('Demo', 'Gere uma aula real com seus conteúdos para salvar no Workspace.');
+    if (!activeDeck || activeDeck.id === 'example-deck') {
+      onNotify('Exemplo', 'Gere um deck real com seus conteúdos para salvar no Workspace.');
       return;
     }
-    const targetSub = activeLesson.subject_id || subjectId || subjects[0]?.id;
+    const targetSub = activeDeck.subject_id || subjectId || subjects[0]?.id;
     if (!targetSub) {
       onNotify('Selecione uma matéria', 'Crie uma matéria no Workspace primeiro.');
       return;
     }
     setSavingWorkspace(true);
     try {
-      await api.saveAnimatedLessonToWorkspace(activeLesson.id, targetSub);
-      onNotify('Salvo no Workspace!', 'A aula animada foi adicionada como nota na matéria.');
+      await api.saveAnimatedLessonToWorkspace(activeDeck.id, targetSub);
+      onNotify('Salvo no Workspace!', 'Apresentação salva como nota organizada na matéria.');
     } catch (err) {
       onNotify('Erro ao salvar', (err as Error).message);
     } finally {
@@ -691,44 +441,42 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
     }
   };
 
-  const totalSec = scenes.reduce((acc, s) => acc + (s.duration_sec || 10), 0);
-  const elapsedBeforeScene = scenes
-    .slice(0, sceneIdx)
-    .reduce((acc, s) => acc + (s.duration_sec || 10), 0);
-  const currentTotalElapsed = Math.min(totalSec, elapsedBeforeScene + sceneElapsedSec);
-  const fmt = (sec: number) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+  const layout = currentSlide?.slide_layout || (currentSlide?.connections?.length ? 'diagram_flow' : 'concept_cards');
 
   return (
     <div className="space-y-5">
-      {/* Top Demo Banner */}
+      {/* Top Banner */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-3">
         <div>
           <p className="text-xs font-semibold text-indigo-200">
-            Estúdio de Vídeo-Aula Animada (Voz + Conexões Visuais + Fontes Confiáveis)
+            Gerador de Slides Didáticos & Ilustrados (estilo Gamma / Keynote)
           </p>
           <p className="text-[11px] text-indigo-200/75">
-            Aceita MP4/Áudio até 2 GB direto para o Google Gemini, PDF de slides ou transcrição.
+            Transforma PDFs, MP4 de aulas ou temas em decks profundos com diagramas, exemplos, código e armadilhas de prova.
           </p>
         </div>
         <button
           type="button"
-          onClick={handlePlayDemo30s}
+          onClick={() => {
+            setActiveDeck(EXAMPLE_DECK);
+            setSlideIdx(0);
+          }}
           className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
         >
-          <Play className="h-3.5 w-3.5" />
-          Assistir Demo 30s Agora
+          <LayoutTemplate className="h-3.5 w-3.5" />
+          Ver Deck de Exemplo
         </button>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        {/* Left: Generator Form + Saved Lessons */}
+        {/* Left: Deck Generator Form */}
         <form
           onSubmit={handleGenerate}
           className="space-y-3.5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 lg:col-span-4"
         >
           <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
-            <Film className="h-4 w-4 text-indigo-400" />
-            Criar Aula Completa
+            <Layers className="h-4 w-4 text-indigo-400" />
+            Gerar Apresentação Completa
           </h3>
 
           <select
@@ -747,42 +495,38 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
           <input
             value={topicHint}
             onChange={(e) => setTopicHint(e.target.value)}
-            placeholder="Tema da aula (ex: Grafos, Limites, n8n Webhooks)"
+            placeholder="Tema da apresentação (ex: Árvores AVL, Limites...)"
             className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-white placeholder:text-zinc-500"
           />
 
-          {/* Duration + Technique */}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="mb-1 block text-[11px] text-zinc-400">Duração da Aula</label>
+              <label className="mb-1 block text-[11px] text-zinc-400">Profundidade</label>
               <select
                 value={targetMinutes}
                 onChange={(e) => setTargetMinutes(Number(e.target.value))}
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-2.5 py-2 text-xs text-white"
               >
-                <option value={0.5}>30s (Demo IA)</option>
-                <option value={5}>5 min (Resumo)</option>
-                <option value={15}>15 min (Objetiva)</option>
-                <option value={30}>30 min (Completa)</option>
-                <option value={45}>45 min (Aprofundada)</option>
-                <option value={60}>60 min (Masterclass)</option>
+                <option value={5}>Rápida (~6 slides)</option>
+                <option value={15}>Objetiva (~12 slides)</option>
+                <option value={30}>Completa (~18 slides)</option>
+                <option value={60}>Masterclass (~25 slides)</option>
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-[11px] text-zinc-400">Técnica</label>
+              <label className="mb-1 block text-[11px] text-zinc-400">Abordagem</label>
               <select
                 value={technique}
                 onChange={(e) => setTechnique(e.target.value)}
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-2.5 py-2 text-xs text-white"
               >
-                <option value="Feynman + Conexões Visuais">Feynman + Visual</option>
-                <option value="Mapas Mentais + Exemplos">Mapas Mentais</option>
-                <option value="Active Recall Guiado">Active Recall</option>
+                <option value="Feynman + Diagramas + Exemplos">Feynman + Diagramas</option>
+                <option value="Mapas Mentais & Conexões">Mapas Mentais</option>
+                <option value="Foco em Prova & Armadilhas">Foco em Prova</option>
               </select>
             </div>
           </div>
 
-          {/* Direct MP4 / Audio upload */}
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70 px-3 py-2 text-xs text-zinc-300 hover:border-indigo-400">
             <span className="flex items-center gap-2 truncate">
               <Upload className="h-3.5 w-3.5 text-cyan-400" />
@@ -806,7 +550,6 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
             </div>
           )}
 
-          {/* PDF slides upload */}
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70 px-3 py-2 text-xs text-zinc-300 hover:border-indigo-400">
             <span className="flex items-center gap-2 truncate">
               <Upload className="h-3.5 w-3.5 text-indigo-400" />
@@ -819,7 +562,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
             rows={3}
             value={transcriptText}
             onChange={(e) => setTranscriptText(e.target.value)}
-            placeholder="Ou cole anotações / objetivos extras..."
+            placeholder="Ou cole anotações / objetivos..."
             className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 text-xs text-white placeholder:text-zinc-500"
           />
 
@@ -829,38 +572,36 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {generating ? 'Montando plano e Módulo 1...' : `Gerar Aula (${targetMinutes < 1 ? '30s' : `${targetMinutes} min`})`}
+            {generating ? 'Criando slides didáticos...' : 'Gerar Slides Completos'}
           </button>
 
-          {lessons.length > 0 && (
+          {decks.length > 0 && (
             <div className="space-y-1.5 border-t border-zinc-800 pt-3">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                Suas Aulas ({lessons.length})
+                Decks Salvos ({decks.length})
               </span>
               <div className="max-h-40 space-y-1 overflow-y-auto">
-                {lessons.map((l) => (
+                {decks.map((d) => (
                   <div
-                    key={l.id}
+                    key={d.id}
                     onClick={() => {
-                      stopSpeech();
-                      setPlaying(false);
-                      setActiveLesson(l);
-                      setSceneIdx(0);
+                      setActiveDeck(d);
+                      setSlideIdx(0);
                     }}
                     className={`flex cursor-pointer items-center justify-between rounded-lg border px-2.5 py-1.5 text-xs ${
-                      activeLesson?.id === l.id
+                      activeDeck?.id === d.id
                         ? 'border-indigo-500/60 bg-indigo-500/15 text-white'
                         : 'border-zinc-800 bg-zinc-950/60 text-zinc-300'
                     }`}
                   >
-                    <span className="truncate">{l.title}</span>
+                    <span className="truncate">{d.title}</span>
                     <button
                       type="button"
                       onClick={async (e) => {
                         e.stopPropagation();
-                        await api.deleteAnimatedLesson(l.id);
-                        setLessons((p) => p.filter((x) => x.id !== l.id));
-                        if (activeLesson?.id === l.id) setActiveLesson(null);
+                        await api.deleteAnimatedLesson(d.id);
+                        setDecks((p) => p.filter((x) => x.id !== d.id));
+                        if (activeDeck?.id === d.id) setActiveDeck(null);
                       }}
                       className="ml-2 text-zinc-500 hover:text-rose-400"
                     >
@@ -873,37 +614,50 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
           )}
         </form>
 
-        {/* Right: Interactive Animated Lesson Player */}
+        {/* Right: Keynote / Gamma Style Slide Presenter */}
         <div className="lg:col-span-8">
-          {activeLesson && currentScene ? (
+          {activeDeck && currentSlide ? (
             <div
-              ref={playerContainerRef}
+              ref={deckContainerRef}
               className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl"
             >
-              {/* Player Top Bar */}
+              {/* Deck Header */}
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/70 px-4 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[11px] text-indigo-300">
-                    <span>{activeLesson.technique}</span>
+                    <span>{activeDeck.technique}</span>
                     <span>•</span>
                     <span>
-                      Cena {sceneIdx + 1}/{scenes.length}
+                      Slide {slideIdx + 1} de {slides.length}
                     </span>
                     {expandingModuleIdx !== null && (
                       <span className="inline-flex items-center gap-1 text-cyan-300">
                         <Loader2 className="h-3 w-3 animate-spin" />
-                        Gerando Módulo {expandingModuleIdx + 1}...
+                        Expandindo módulo {expandingModuleIdx + 1}...
                       </span>
                     )}
                   </div>
-                  <h3 className="truncate text-sm font-bold text-white">{activeLesson.title}</h3>
+                  <h3 className="truncate text-sm font-bold text-white">{activeDeck.title}</h3>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={handleToggleReadSlide}
+                    className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-xs ${
+                      speakingSlide
+                        ? 'border-cyan-500 bg-cyan-500/20 text-cyan-300'
+                        : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-white'
+                    }`}
+                    title="Ouvir explicação deste slide"
+                  >
+                    {speakingSlide ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                    Ouvir
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
-                      const el = playerContainerRef.current;
+                      const el = deckContainerRef.current;
                       if (!el) return;
                       if (document.fullscreenElement) void document.exitFullscreen();
                       else void el.requestFullscreen?.();
@@ -920,113 +674,137 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
                     className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-indigo-400 hover:text-white"
                   >
                     {savingWorkspace ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BookOpen className="h-3.5 w-3.5 text-indigo-400" />}
-                    Enviar para Workspace
+                    Salvar no Workspace
                   </button>
                 </div>
               </div>
 
-              {/* Cinematic 16:9 Vector Animated Video Stage */}
-              <CinematicSceneStage
-                scene={currentScene}
-                playing={playing}
-                visibleNodesCount={visibleNodesCount}
-                sceneElapsedSec={sceneElapsedSec}
-              />
+              {/* Editorial Slide Canvas */}
+              <div className="relative min-h-[400px] space-y-5 bg-gradient-to-br from-[#0b0f1d] via-zinc-950 to-[#0d111e] p-6 md:p-8">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-indigo-300">
+                    {layout === 'trap_alert' ? (
+                      <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+                    ) : layout === 'example_code' ? (
+                      <Code2 className="h-3.5 w-3.5 text-emerald-400" />
+                    ) : layout === 'diagram_flow' ? (
+                      <GitBranch className="h-3.5 w-3.5 text-cyan-400" />
+                    ) : (
+                      <Lightbulb className="h-3.5 w-3.5 text-amber-400" />
+                    )}
+                    Slide {slideIdx + 1}
+                  </span>
+                  {currentSlide.sources_hint && (
+                    <span className="text-[11px] text-zinc-500">Fonte: {currentSlide.sources_hint}</span>
+                  )}
+                </div>
 
-              {/* Video Controls */}
-              <div className="space-y-3 border-t border-zinc-800 bg-zinc-900/80 px-5 py-3.5">
-                {/* Timeline bar */}
-                <div className="flex items-center gap-3 text-[11px] tabular-nums text-zinc-400">
-                  <span>{fmt(currentTotalElapsed)}</span>
-                  <div className="flex flex-1 gap-1">
-                    {scenes.map((sc, idx) => (
-                      <button
-                        key={sc.id}
-                        type="button"
-                        onClick={() => setSceneIdx(idx)}
-                        title={sc.scene_title}
-                        className={`h-2 flex-1 rounded-full transition ${
-                          idx < sceneIdx
-                            ? 'bg-indigo-500'
-                            : idx === sceneIdx
-                              ? 'bg-cyan-400'
-                              : 'bg-zinc-800 hover:bg-zinc-700'
+                <h2 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
+                  {currentSlide.scene_title}
+                </h2>
+
+                <p className="max-w-3xl text-[15px] leading-relaxed text-zinc-200">
+                  {currentSlide.narration}
+                </p>
+
+                {/* Diagram / Code / Cards depending on slide richness */}
+                {currentSlide.example_or_code && (
+                  <pre className="overflow-x-auto rounded-xl border border-emerald-500/30 bg-[#070b14] p-4 font-mono text-xs leading-relaxed text-emerald-200">
+                    {currentSlide.example_or_code}
+                  </pre>
+                )}
+
+                {layout === 'diagram_flow' && currentSlide.connections?.length > 0 && (
+                  <SlideIllustration scene={currentSlide} />
+                )}
+
+                {currentSlide.visual_nodes.length > 0 && (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {currentSlide.visual_nodes.map((node, i) => (
+                      <div
+                        key={i}
+                        className={`rounded-xl border p-4 ${
+                          node.kind === 'warning'
+                            ? 'border-rose-500/40 bg-rose-500/10'
+                            : node.kind === 'analogy'
+                              ? 'border-cyan-500/40 bg-cyan-500/10'
+                              : node.kind === 'example'
+                                ? 'border-emerald-500/40 bg-emerald-500/10'
+                                : 'border-indigo-500/40 bg-indigo-500/10'
                         }`}
-                      />
+                      >
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                          {node.kind === 'warning'
+                            ? 'Atenção'
+                            : node.kind === 'analogy'
+                              ? 'Analogia'
+                              : node.kind === 'example'
+                                ? 'Exemplo'
+                                : 'Conceito'}
+                        </div>
+                        <h4 className="mt-1 text-sm font-bold text-white">{node.label}</h4>
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-300">{node.detail}</p>
+                      </div>
                     ))}
                   </div>
-                  <span>{fmt(totalSec)}</span>
+                )}
+
+                {/* Key Takeaway Callout */}
+                <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs font-medium text-emerald-200">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                  <span>{currentSlide.key_takeaway}</span>
+                </div>
+              </div>
+
+              {/* Slide Thumbnails & Controls */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 bg-zinc-900/80 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => setSlideIdx((i) => Math.max(0, i - 1))}
+                  disabled={slideIdx === 0}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs font-medium text-zinc-200 hover:text-white disabled:opacity-40"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Anterior
+                </button>
+
+                <div className="flex max-w-md flex-wrap justify-center gap-1.5">
+                  {slides.map((sc, i) => (
+                    <button
+                      key={sc.id}
+                      type="button"
+                      onClick={() => setSlideIdx(i)}
+                      title={sc.scene_title}
+                      className={`h-7 min-w-[28px] rounded-lg px-2 text-xs font-semibold transition ${
+                        i === slideIdx
+                          ? 'bg-indigo-600 text-white'
+                          : 'border border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSceneIdx((i) => Math.max(0, i - 1))}
-                      disabled={sceneIdx === 0}
-                      className="rounded-lg border border-zinc-800 bg-zinc-950 p-2 text-zinc-300 hover:text-white disabled:opacity-40"
-                    >
-                      <SkipBack className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPlaying((p) => !p)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
-                    >
-                      {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                      {playing ? 'Pausar' : 'Assistir'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSceneIdx((i) => Math.min(scenes.length - 1, i + 1))}
-                      disabled={sceneIdx >= scenes.length - 1}
-                      className="rounded-lg border border-zinc-800 bg-zinc-950 p-2 text-zinc-300 hover:text-white disabled:opacity-40"
-                    >
-                      <SkipForward className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={voiceName}
-                      onChange={(e) => setVoiceName(e.target.value as 'Puck' | 'Kore' | 'Aoede')}
-                      className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-200"
-                      title="Estilo de voz neural"
-                    >
-                      <option value="Puck">Voz: Dinâmica (Puck)</option>
-                      <option value="Kore">Voz: Professor (Kore)</option>
-                      <option value="Aoede">Voz: Didática (Aoede)</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setMuted((m) => !m)}
-                      className="rounded-lg border border-zinc-800 bg-zinc-950 p-2 text-zinc-300 hover:text-white"
-                      title={muted ? 'Ativar voz' : 'Silenciar voz'}
-                    >
-                      {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                    </button>
-                    <select
-                      value={rate}
-                      onChange={(e) => setRate(Number(e.target.value))}
-                      className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-200"
-                    >
-                      <option value={1}>1.0x</option>
-                      <option value={1.1}>1.1x</option>
-                      <option value={1.25}>1.25x</option>
-                      <option value={1.5}>1.5x</option>
-                    </select>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setSlideIdx((i) => Math.min(slides.length - 1, i + 1))}
+                  disabled={slideIdx >= slides.length - 1}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
+                >
+                  Próximo
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
           ) : (
             <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/20 p-8 text-center">
-              <Film className="h-10 w-10 text-indigo-400/70" />
+              <LayoutTemplate className="h-10 w-10 text-indigo-400/70" />
               <p className="mt-3 text-base font-semibold text-white">
-                Pronto para gerar sua Vídeo-Aula Animada
+                Crie apresentações de slides completas e didáticas
               </p>
               <p className="mt-1 max-w-md text-xs text-zinc-400">
-                Clique em <strong>Assistir Demo 30s Agora</strong> acima para testar a experiência animada com voz na hora, ou suba seu MP4/PDF ao lado para gerar uma aula de 30 a 60 minutos!
+                Clique em <strong>Ver Deck de Exemplo</strong> acima ou envie seus PDFs/MP4/tema ao lado para gerar slides ilustrados com diagramas, código e armadilhas de prova.
               </p>
             </div>
           )}

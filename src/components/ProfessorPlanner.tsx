@@ -344,7 +344,7 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
 
         <div className="flex flex-wrap gap-1.5 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800">
           {[
-            { id: 'animated', label: 'Vídeo-Aula Animada', icon: Film },
+            { id: 'animated', label: 'Slides Didáticos (IA)', icon: Film },
             { id: 'feynman', label: 'Aula Feynman (PDF)', icon: Sparkles },
             { id: 'professor', label: 'Carlos Creator', icon: BrainCircuit },
             { id: 'planner', label: 'Planejador & Agenda', icon: CalendarClock },
