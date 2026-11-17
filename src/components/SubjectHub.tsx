@@ -95,9 +95,11 @@ async function compressCoverImage(file: File): Promise<string> {
 function RichMarkdown({
   content,
   onSelectLink,
+  onToggleChecklistLine,
 }: {
   content: string;
   onSelectLink: (label: string) => void;
+  onToggleChecklistLine?: (lineIdx: number) => void;
 }) {
   const lines = content.split('\n');
 
@@ -181,22 +183,35 @@ function RichMarkdown({
             </blockquote>
           );
         }
+        if (trimmed === '---') {
+          return <hr key={idx} className="my-3 border-zinc-800" />;
+        }
         if (trimmed.startsWith('- [x] ') || trimmed.startsWith('- [X] ')) {
           return (
-            <div key={idx} className="flex items-start gap-2.5 pl-1 text-zinc-400 line-through">
+            <button
+              key={idx}
+              type="button"
+              onClick={() => onToggleChecklistLine?.(idx)}
+              className="flex w-full items-start gap-2.5 pl-1 text-left text-zinc-400 line-through transition hover:text-zinc-300"
+            >
               <span className="mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border border-emerald-500/50 bg-emerald-500/20 text-emerald-300">
                 <Check className="h-3 w-3" />
               </span>
               <span>{renderInline(trimmed.slice(6))}</span>
-            </div>
+            </button>
           );
         }
         if (trimmed.startsWith('- [ ] ')) {
           return (
-            <div key={idx} className="flex items-start gap-2.5 pl-1">
-              <span className="mt-1 inline-flex h-4 w-4 shrink-0 rounded border border-zinc-600 bg-zinc-900" />
+            <button
+              key={idx}
+              type="button"
+              onClick={() => onToggleChecklistLine?.(idx)}
+              className="flex w-full items-start gap-2.5 pl-1 text-left transition hover:text-white"
+            >
+              <span className="mt-1 inline-flex h-4 w-4 shrink-0 rounded border border-zinc-600 bg-zinc-900 hover:border-indigo-400" />
               <span>{renderInline(trimmed.slice(6))}</span>
-            </div>
+            </button>
           );
         }
         if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
@@ -235,6 +250,7 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
   const [savingNote, setSavingNote] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
   const [wikiQuery, setWikiQuery] = useState<string | null>(null);
+  const [slashOpen, setSlashOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Create Space Modal
@@ -491,6 +507,38 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
     setNoteContentDraft(next);
     setWikiQuery(null);
     setTimeout(() => el?.focus(), 0);
+  };
+
+  const handleToggleChecklistLine = async (lineIdx: number) => {
+    if (!activeNote) return;
+    const lines = noteContentDraft.split('\n');
+    const line = lines[lineIdx];
+    if (line === undefined) return;
+    if (/^\s*- \[[xX]\] /.test(line)) {
+      lines[lineIdx] = line.replace(/- \[[xX]\] /, '- [ ] ');
+    } else if (/^\s*- \[ \] /.test(line)) {
+      lines[lineIdx] = line.replace(/- \[ \] /, '- [x] ');
+    } else {
+      return;
+    }
+    const next = lines.join('\n');
+    setNoteContentDraft(next);
+    await api.updateNote(activeNote.id, { content_markdown: next });
+  };
+
+  const applySlashCommand = (prefix: string) => {
+    const el = textareaRef.current;
+    const cursor = el ? el.selectionStart : noteContentDraft.length;
+    const before = noteContentDraft.slice(0, cursor).replace(/\/$/, '');
+    const after = noteContentDraft.slice(cursor);
+    const next = `${before}${prefix}${after}`;
+    setNoteContentDraft(next);
+    setSlashOpen(false);
+    setTimeout(() => {
+      el?.focus();
+      const pos = before.length + prefix.length;
+      el?.setSelectionRange(pos, pos);
+    }, 0);
   };
 
   const insertSnippet = (prefix: string, suffix = '') => {
@@ -1431,10 +1479,46 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
                             ref={textareaRef}
                             rows={16}
                             value={noteContentDraft}
-                            onChange={(e) => handleEditorChange(e.target.value)}
-                            placeholder="Escreva em Markdown... Use [[ para conectar com outras notas ou matérias."
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              handleEditorChange(v);
+                              const cur = e.target.selectionStart;
+                              const lineStart = v.lastIndexOf('\n', cur - 1) + 1;
+                              const currentLine = v.slice(lineStart, cur);
+                              setSlashOpen(currentLine.trim() === '/');
+                            }}
+                            placeholder="Escreva em Markdown... Digite / para comandos ou [[ para conexões."
                             className="w-full resize-y rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 font-sans text-[15px] leading-relaxed text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500/60 focus:outline-none"
                           />
+                          {slashOpen && (
+                            <div className="mt-1.5 max-w-xs rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl">
+                              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                                Inserir Bloco (Notion)
+                              </div>
+                              {[
+                                { label: 'Título de Seção', prefix: '## ' },
+                                { label: 'Subtítulo', prefix: '### ' },
+                                { label: 'Checklist Interativo', prefix: '- [ ] ' },
+                                { label: 'Lista com Marcadores', prefix: '- ' },
+                                { label: 'Callout / Destaque', prefix: '> ' },
+                                { label: 'Linha Divisória', prefix: '---\n' },
+                                { label: 'Conexão [[Nota]]', prefix: '[[' },
+                              ].map((cmd) => (
+                                <button
+                                  key={cmd.label}
+                                  type="button"
+                                  onClick={() => {
+                                    applySlashCommand(cmd.prefix);
+                                    if (cmd.prefix === '[[') setWikiQuery('');
+                                  }}
+                                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs text-zinc-200 hover:bg-indigo-600/25"
+                                >
+                                  <span>{cmd.label}</span>
+                                  <code className="text-[10px] text-zinc-500">{cmd.prefix.trim()}</code>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           {wikiQuery !== null && wikiSuggestions.length > 0 && (
                             <div className="mt-1.5 max-w-sm rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl">
                               <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
@@ -1458,7 +1542,11 @@ export function SubjectHub({ onNavigate }: SubjectHubProps) {
                           )}
                         </div>
                       ) : (
-                        <RichMarkdown content={noteContentDraft} onSelectLink={handleLinkClick} />
+                        <RichMarkdown
+                          content={noteContentDraft}
+                          onSelectLink={handleLinkClick}
+                          onToggleChecklistLine={handleToggleChecklistLine}
+                        />
                       )}
 
                       {/* Backlinks Footer */}

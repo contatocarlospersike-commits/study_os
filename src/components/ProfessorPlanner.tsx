@@ -56,14 +56,14 @@ function MermaidDiagram({ chart }: { chart: string }) {
 
   if (!svg) {
     return (
-      <pre className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 overflow-x-auto">
+      <pre className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-400 overflow-x-auto">
         {chart}
       </pre>
     );
   }
   return (
     <div
-      className="p-3 rounded-xl bg-slate-950 border border-slate-800 overflow-x-auto flex justify-center"
+      className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 overflow-x-auto flex justify-center"
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
@@ -331,11 +331,11 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
       {/* Header & Subtabs */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-100 flex items-center gap-2">
+          <h2 className="text-xl font-semibold text-zinc-100 flex items-center gap-2">
             <GraduationCap className="w-5 h-5 text-cyan-400" />
             Professor Creator & Planejador
           </h2>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-zinc-400">
             Estruture aulas para o YouTube, receba análise dupla (fixação + comunicação) e organize sua rotina em checklist.
           </p>
         </div>
@@ -356,7 +356,7 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   active
                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                    : 'text-slate-400 hover:text-slate-200'
+                    : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -563,12 +563,12 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
         <div className="space-y-5">
           <form
             onSubmit={handleGenerateLesson}
-            className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800 flex flex-col sm:flex-row gap-3"
+            className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800 flex flex-col sm:flex-row gap-3"
           >
             <select
               value={subjectId}
               onChange={(e) => setSubjectId(e.target.value)}
-              className="sm:w-56 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100"
+              className="sm:w-56 px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100"
             >
               {subjects.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -581,13 +581,13 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
               placeholder="Tema da aula/vídeo (ex: Árvore B+, Pipeline RISC, 3ª Forma Normal)"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100"
+              className="flex-1 px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100"
               required
             />
             <button
               type="submit"
               disabled={loadingLesson || !topic.trim()}
-              className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-cyan-500 text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-cyan-500 text-zinc-950 hover:bg-cyan-400 disabled:opacity-50"
             >
               {loadingLesson ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               Gerar Esqueleto de Aula
@@ -598,9 +598,9 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
             {/* Left: Creator Skeleton */}
             <div className="lg:col-span-7">
               {lesson ? (
-                <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-4">
+                <div className="p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-lg font-semibold text-slate-100">{lesson.title}</h3>
+                    <h3 className="text-lg font-semibold text-zinc-100">{lesson.title}</h3>
                     <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
                       Esqueleto Guiado
                     </span>
@@ -612,11 +612,11 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                   </div>
 
                   {lesson.structureBlocks && lesson.structureBlocks.length > 0 && (
-                    <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1.5">
-                      <div className="text-xs font-semibold text-slate-200">
+                    <div className="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 space-y-1.5">
+                      <div className="text-xs font-semibold text-zinc-200">
                         Blocos para você estruturar e explicar com suas palavras:
                       </div>
-                      <ol className="list-decimal pl-4 text-xs text-slate-300 space-y-1">
+                      <ol className="list-decimal pl-4 text-xs text-zinc-300 space-y-1">
                         {lesson.structureBlocks.map((b, i) => (
                           <li key={i}>{b}</li>
                         ))}
@@ -629,36 +629,36 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                     {lesson.analogy}
                   </div>
 
-                  <div className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+                  <div className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed">
                     {lesson.coreExplanation}
                   </div>
 
                   {lesson.mermaidDiagram && (
                     <div>
-                      <div className="text-xs font-medium text-slate-400 mb-1.5">
+                      <div className="text-xs font-medium text-zinc-400 mb-1.5">
                         Diagrama Visual (para usar na tela)
                       </div>
                       <MermaidDiagram chart={lesson.mermaidDiagram} />
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800 text-xs">
-                    <div className="text-slate-300">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-zinc-800 text-xs">
+                    <div className="text-zinc-300">
                       <strong className="text-emerald-300 block mb-0.5">Pergunta para Comentários:</strong>
                       {lesson.audienceQuestion}
                     </div>
-                    <div className="text-slate-400">
-                      <strong className="text-slate-200 block mb-0.5">Termo em Inglês:</strong>
+                    <div className="text-zinc-400">
+                      <strong className="text-zinc-200 block mb-0.5">Termo em Inglês:</strong>
                       {lesson.englishTermTip}
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="p-8 rounded-2xl bg-slate-900/40 border border-slate-800 text-center space-y-2">
-                  <p className="text-sm text-slate-300">
+                <div className="p-8 rounded-2xl bg-zinc-900/40 border border-zinc-800 text-center space-y-2">
+                  <p className="text-sm text-zinc-300">
                     Escolha uma matéria e digite o tema acima para gerar seu esqueleto de aula.
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-zinc-400">
                     A IA não escreve texto decorado: ela te dá o gancho, os blocos lógicos e o diagrama para você estruturar e gravar do seu jeito (máxima fixação).
                   </p>
                 </div>
@@ -666,17 +666,17 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
             </div>
 
             {/* Right: Evaluate YouTube Video OR Text */}
-            <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-4">
+            <div className="lg:col-span-5 p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
                   Avaliar Sua Aula
                 </span>
-                <div className="flex gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                <div className="flex gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800">
                   <button
                     type="button"
                     onClick={() => setEvalMode('youtube')}
                     className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium ${
-                      evalMode === 'youtube' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400'
+                      evalMode === 'youtube' ? 'bg-cyan-500/20 text-cyan-300' : 'text-zinc-400'
                     }`}
                   >
                     <Video className="w-3 h-3" />
@@ -686,7 +686,7 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                     type="button"
                     onClick={() => setEvalMode('text')}
                     className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium ${
-                      evalMode === 'text' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400'
+                      evalMode === 'text' ? 'bg-cyan-500/20 text-cyan-300' : 'text-zinc-400'
                     }`}
                   >
                     <MessageSquareText className="w-3 h-3" />
@@ -702,19 +702,19 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                     placeholder="Cole o link do vídeo no YouTube (https://youtube.com/...)"
                     value={youtubeUrl}
                     onChange={(e) => setYoutubeUrl(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100"
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-100"
                   />
                   <textarea
                     rows={4}
                     placeholder="Opcional (ou se o vídeo for privado): cole aqui a transcrição/roteiro que você falou..."
                     value={transcriptFallback}
                     onChange={(e) => setTranscriptFallback(e.target.value)}
-                    className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100"
+                    className="w-full p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-100"
                   />
                   <button
                     type="submit"
                     disabled={evaluating || !topic.trim() || (!youtubeUrl.trim() && !transcriptFallback.trim())}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 text-zinc-950 hover:bg-emerald-400 disabled:opacity-50"
                   >
                     {evaluating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
                     Analisar Vídeo (Fixação + Creator)
@@ -723,20 +723,20 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
               ) : (
                 <form onSubmit={handleEvaluateText} className="space-y-3">
                   {lesson?.checkpointQuestion && (
-                    <p className="text-xs text-slate-300 font-medium">{lesson.checkpointQuestion}</p>
+                    <p className="text-xs text-zinc-300 font-medium">{lesson.checkpointQuestion}</p>
                   )}
                   <textarea
                     rows={6}
                     placeholder="Explique o tema com suas próprias palavras..."
                     value={explanation}
                     onChange={(e) => setExplanation(e.target.value)}
-                    className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100"
+                    className="w-full p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100"
                     required
                   />
                   <button
                     type="submit"
                     disabled={evaluating || !topic.trim() || !explanation.trim()}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 text-zinc-950 hover:bg-emerald-400 disabled:opacity-50"
                   >
                     {evaluating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                     Avaliar Explicação Feynman
@@ -746,36 +746,36 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
 
               {/* YouTube 2-layer Evaluation Output */}
               {ytEvaluation && (
-                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
+                <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3 text-xs">
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-center">
-                      <div className="text-[11px] text-slate-400">Domínio Técnico</div>
+                    <div className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-800 text-center">
+                      <div className="text-[11px] text-zinc-400">Domínio Técnico</div>
                       <div className="text-lg font-bold text-emerald-400">{ytEvaluation.technicalScore}/100</div>
                     </div>
-                    <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-center">
-                      <div className="text-[11px] text-slate-400">Comunicação Creator</div>
+                    <div className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-800 text-center">
+                      <div className="text-[11px] text-zinc-400">Comunicação Creator</div>
                       <div className="text-lg font-bold text-cyan-400">{ytEvaluation.creatorScore}/100</div>
                     </div>
                   </div>
                   <div>
                     <strong className="text-violet-300 block mb-0.5">Gancho (Primeiros 30s):</strong>
-                    <p className="text-slate-300">{ytEvaluation.hookFeedback}</p>
+                    <p className="text-zinc-300">{ytEvaluation.hookFeedback}</p>
                   </div>
                   <div>
                     <strong className="text-cyan-300 block mb-0.5">Didática & Ritmo:</strong>
-                    <p className="text-slate-300">{ytEvaluation.communicationFeedback}</p>
+                    <p className="text-zinc-300">{ytEvaluation.communicationFeedback}</p>
                   </div>
                   {ytEvaluation.gaps.length > 0 && (
                     <div>
                       <div className="text-amber-300 font-medium mb-1">Lacunas Técnicas</div>
-                      <ul className="list-disc pl-4 text-slate-300 space-y-0.5">
+                      <ul className="list-disc pl-4 text-zinc-300 space-y-0.5">
                         {ytEvaluation.gaps.map((g, i) => (
                           <li key={i}>{g}</li>
                         ))}
                       </ul>
                     </div>
                   )}
-                  <div className="pt-2 border-t border-slate-800 text-slate-200">
+                  <div className="pt-2 border-t border-zinc-800 text-zinc-200">
                     <strong className="text-emerald-300 block mb-0.5">Próximo Passo:</strong>
                     {ytEvaluation.nextStep}
                   </div>
@@ -784,9 +784,9 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
 
               {/* Text Evaluation Output */}
               {evaluation && (
-                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
+                <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 font-medium">Nota Feynman</span>
+                    <span className="text-zinc-400 font-medium">Nota Feynman</span>
                     <span className={`text-base font-bold ${evaluation.score >= 70 ? 'text-emerald-400' : 'text-amber-400'}`}>
                       {evaluation.score}/100
                     </span>
@@ -803,14 +803,14 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                       <div className="text-amber-300 font-medium mb-1 flex items-center gap-1">
                         <AlertTriangle className="w-3.5 h-3.5" /> Lacunas
                       </div>
-                      <ul className="list-disc pl-4 text-slate-300 space-y-0.5">
+                      <ul className="list-disc pl-4 text-zinc-300 space-y-0.5">
                         {evaluation.gaps.map((g, i) => (
                           <li key={i}>{g}</li>
                         ))}
                       </ul>
                     </div>
                   )}
-                  <div className="pt-2 border-t border-slate-800 text-slate-200">
+                  <div className="pt-2 border-t border-zinc-800 text-zinc-200">
                     <strong className="text-cyan-300 block mb-0.5">Versão Lapidada:</strong>
                     {evaluation.correctedExplanation}
                   </div>
@@ -824,40 +824,40 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
       {/* SUBTAB 2: PLANEJADOR COM ROTINA + CHECKLIST + GOOGLE AGENDA */}
       {subTab === 'planner' && (
         <div className="space-y-5">
-          <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-4">
+          <div className="p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
             <div>
-              <div className="text-sm font-semibold text-slate-100">Perguntas da sua Rotina</div>
-              <p className="text-xs text-slate-400">
+              <div className="text-sm font-semibold text-zinc-100">Perguntas da sua Rotina</div>
+              <p className="text-xs text-zinc-400">
                 A IA equilibra revisões pendentes com estudo novo programado e gera seu checklist diário.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Próxima prova / meta da semana</label>
+                <label className="text-[11px] text-zinc-400 block mb-1">Próxima prova / meta da semana</label>
                 <input
                   type="text"
                   placeholder="Ex: Prova de Cálculo sexta / Avançar Grafos"
                   value={examGoal}
                   onChange={(e) => setExamGoal(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100"
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-100"
                 />
               </div>
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Melhor horário para estudar</label>
+                <label className="text-[11px] text-zinc-400 block mb-1">Melhor horário para estudar</label>
                 <input
                   type="text"
                   value={preferredTime}
                   onChange={(e) => setPreferredTime(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100"
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-100"
                 />
               </div>
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Foco do Planejamento</label>
+                <label className="text-[11px] text-zinc-400 block mb-1">Foco do Planejamento</label>
                 <select
                   value={focusBalance}
                   onChange={(e) => setFocusBalance(e.target.value as RoutineConfig['focusBalance'])}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100"
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-100"
                 >
                   <option value="balanced">Equilibrado (70% Avanço Novo / 30% Revisão)</option>
                   <option value="advance">Foco em Conteúdo Novo</option>
@@ -866,9 +866,9 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-800">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-slate-400 mr-1">Tempo disponível hoje:</span>
+                <span className="text-xs text-zinc-400 mr-1">Tempo disponível hoje:</span>
                 {[25, 45, 60, 90, 120].map((m) => (
                   <button
                     key={m}
@@ -876,7 +876,7 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
                       availableMin === m
                         ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200'
                     }`}
                   >
                     {m} min
@@ -886,7 +886,7 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
               <button
                 onClick={handleGeneratePlan}
                 disabled={loadingPlan}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-cyan-500 text-zinc-950 hover:bg-cyan-400 disabled:opacity-50"
               >
                 {loadingPlan ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                 Gerar Planejamento & Checklist
@@ -901,14 +901,14 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
           )}
 
           {/* Persistent Checklist + Google Calendar export */}
-          <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-3">
+          <div className="p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-100">
+              <h3 className="text-sm font-semibold text-zinc-100">
                 Checklist de Estudo ({checklist.filter((c) => c.completed).length}/{checklist.length} concluídos)
               </h3>
             </div>
             {checklist.length === 0 ? (
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-zinc-400">
                 Clique em "Gerar Planejamento & Checklist" acima para montar seus blocos de hoje.
               </p>
             ) : (
@@ -918,8 +918,8 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                     key={item.id}
                     className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                       item.completed
-                        ? 'bg-slate-950/40 border-slate-800/60 opacity-65'
-                        : 'bg-slate-950/90 border-slate-800'
+                        ? 'bg-zinc-950/40 border-zinc-800/60 opacity-65'
+                        : 'bg-zinc-950/90 border-zinc-800'
                     }`}
                   >
                     <label className="flex items-start gap-3 cursor-pointer flex-1">
@@ -927,13 +927,13 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                         type="checkbox"
                         checked={Boolean(item.completed)}
                         onChange={() => handleToggleChecklist(item.id)}
-                        className="mt-1 rounded border-slate-700 bg-slate-900 text-cyan-500"
+                        className="mt-1 rounded border-zinc-700 bg-zinc-900 text-cyan-500"
                       />
                       <div className="space-y-0.5">
-                        <div className={`text-sm font-medium ${item.completed ? 'line-through text-slate-400' : 'text-slate-100'}`}>
+                        <div className={`text-sm font-medium ${item.completed ? 'line-through text-zinc-400' : 'text-zinc-100'}`}>
                           {item.title}
                         </div>
-                        <div className="text-xs text-slate-400">
+                        <div className="text-xs text-zinc-400">
                           <span className="text-cyan-300">{item.subject_name}</span> · {item.duration_min} min · {item.reason}
                         </div>
                       </div>
@@ -943,7 +943,7 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                         href={buildGoogleCalendarUrl(item)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-slate-900 border border-slate-700 text-slate-200 hover:border-cyan-500/40 hover:text-cyan-300"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-zinc-900 border border-zinc-700 text-zinc-200 hover:border-cyan-500/40 hover:text-cyan-300"
                       >
                         <CalendarPlus className="w-3.5 h-3.5" />
                         Google Agenda
@@ -951,7 +951,7 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
                       <button
                         type="button"
                         onClick={() => handleDeleteChecklist(item.id)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400"
+                        className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400"
                         title="Remover item"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -967,22 +967,22 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
 
       {/* SUBTAB 3: CALIBRAÇÃO COGNITIVA */}
       {subTab === 'calibration' && profile && (
-        <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-5 max-w-2xl">
+        <div className="p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-5 max-w-2xl">
           <div>
-            <h3 className="text-base font-semibold text-slate-100">Calibração Cognitiva</h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <h3 className="text-base font-semibold text-zinc-100">Calibração Cognitiva</h3>
+            <p className="text-xs text-zinc-400 mt-0.5">
               Ajusta automaticamente os blocos do Planejador, o estilo das aulas do Professor e o suporte em inglês.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-slate-300 block mb-1.5">Duração ideal de bloco (min)</label>
+              <label className="text-xs text-zinc-300 block mb-1.5">Duração ideal de bloco (min)</label>
               <select
                 value={profile.preferred_block_min}
                 onChange={(e) => handleSaveProfile({ preferred_block_min: Number(e.target.value) })}
                 disabled={savingProfile}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100"
               >
                 {[15, 25, 35, 45, 60].map((v) => (
                   <option key={v} value={v}>
@@ -993,14 +993,14 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
             </div>
 
             <div>
-              <label className="text-xs text-slate-300 block mb-1.5">Nível de Inglês Técnico</label>
+              <label className="text-xs text-zinc-300 block mb-1.5">Nível de Inglês Técnico</label>
               <select
                 value={profile.english_level}
                 onChange={(e) =>
                   handleSaveProfile({ english_level: e.target.value as LearningProfile['english_level'] })
                 }
                 disabled={savingProfile}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-zinc-100"
               >
                 <option value="beginner">Iniciante (mais suporte em PT-BR)</option>
                 <option value="intermediate">Intermediário (termos técnicos bilíngues)</option>
@@ -1010,22 +1010,22 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4 pt-2">
-            <label className="flex items-center gap-2.5 text-sm text-slate-200 cursor-pointer">
+            <label className="flex items-center gap-2.5 text-sm text-zinc-200 cursor-pointer">
               <input
                 type="checkbox"
                 checked={Boolean(profile.visual_preference)}
                 onChange={(e) => handleSaveProfile({ visual_preference: e.target.checked ? 1 : 0 })}
-                className="rounded border-slate-700 bg-slate-950 text-cyan-500"
+                className="rounded border-zinc-700 bg-zinc-950 text-cyan-500"
               />
               Preferir diagramas visuais (Mermaid)
             </label>
 
-            <label className="flex items-center gap-2.5 text-sm text-slate-200 cursor-pointer">
+            <label className="flex items-center gap-2.5 text-sm text-zinc-200 cursor-pointer">
               <input
                 type="checkbox"
                 checked={Boolean(profile.frequent_questions)}
                 onChange={(e) => handleSaveProfile({ frequent_questions: e.target.checked ? 1 : 0 })}
-                className="rounded border-slate-700 bg-slate-950 text-cyan-500"
+                className="rounded border-zinc-700 bg-zinc-950 text-cyan-500"
               />
               Checkpoints frequentes (Active Recall)
             </label>
