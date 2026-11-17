@@ -437,6 +437,7 @@ cognitiveRouter.post('/animated-lessons/generate', async (req, res) => {
     pdf_base64,
     file_uri,
     file_mime_type,
+    media_files,
     target_minutes = 5,
     technique = 'Feynman + Conexões Visuais',
   } = req.body as {
@@ -446,6 +447,7 @@ cognitiveRouter.post('/animated-lessons/generate', async (req, res) => {
     pdf_base64?: string;
     file_uri?: string;
     file_mime_type?: string;
+    media_files?: Array<{ uri: string; mime_type: string; name?: string }>;
     target_minutes?: number;
     technique?: string;
   };
@@ -474,6 +476,7 @@ cognitiveRouter.post('/animated-lessons/generate', async (req, res) => {
     pdfBase64: pdf_base64,
     fileUri: file_uri,
     fileMimeType: file_mime_type,
+    mediaFiles: media_files?.map((f) => ({ uri: f.uri, mimeType: f.mime_type, name: f.name })),
     targetMinutes: Number(target_minutes) || 5,
     technique,
   });
@@ -514,10 +517,11 @@ cognitiveRouter.post('/animated-lessons/generate', async (req, res) => {
 });
 
 cognitiveRouter.post('/animated-lessons/:id/expand-module', async (req, res) => {
-  const { module_index, file_uri, file_mime_type } = req.body as {
+  const { module_index, file_uri, file_mime_type, media_files } = req.body as {
     module_index: number;
     file_uri?: string;
     file_mime_type?: string;
+    media_files?: Array<{ uri: string; mime_type: string; name?: string }>;
   };
   const lesson = await queryOne<Record<string, unknown>>(
     `SELECT * FROM animated_lessons WHERE id = ? AND user_id = ?`,
@@ -562,6 +566,7 @@ cognitiveRouter.post('/animated-lessons/:id/expand-module', async (req, res) => 
     contextText,
     fileUri: file_uri,
     fileMimeType: file_mime_type,
+    mediaFiles: media_files?.map((f) => ({ uri: f.uri, mimeType: f.mime_type, name: f.name })),
   });
 
   const nextModules = modules.map((m) => (m.index === module_index ? { ...m, expanded: true } : m));

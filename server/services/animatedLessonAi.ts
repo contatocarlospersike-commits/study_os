@@ -109,11 +109,18 @@ export async function checkGeminiFileStatus(fileName: string): Promise<{
   };
 }
 
+export interface MediaFileRef {
+  uri: string;
+  mimeType: string;
+  name?: string;
+}
+
 function buildMultimodalParts(params: {
   prompt: string;
   pdfBase64?: string;
   fileUri?: string;
   fileMimeType?: string;
+  mediaFiles?: MediaFileRef[];
 }) {
   const parts: Array<
     | { text: string }
@@ -121,7 +128,18 @@ function buildMultimodalParts(params: {
     | { fileData: { mimeType: string; fileUri: string } }
   > = [];
 
-  if (params.fileUri) {
+  if (params.mediaFiles && params.mediaFiles.length > 0) {
+    for (const f of params.mediaFiles) {
+      if (f.uri) {
+        parts.push({
+          fileData: {
+            mimeType: f.mimeType || 'application/octet-stream',
+            fileUri: f.uri,
+          },
+        });
+      }
+    }
+  } else if (params.fileUri) {
     parts.push({
       fileData: {
         mimeType: params.fileMimeType || 'video/mp4',
@@ -221,6 +239,7 @@ export async function generateAnimatedLessonInitial(params: {
   pdfBase64?: string;
   fileUri?: string;
   fileMimeType?: string;
+  mediaFiles?: MediaFileRef[];
   targetMinutes: number;
   technique: string;
 }): Promise<{
@@ -232,8 +251,20 @@ export async function generateAnimatedLessonInitial(params: {
   const ai = getAi();
   const isShort = params.targetMinutes <= 5;
 
-  const hasMediaOrPdf = Boolean(params.pdfBase64 || params.fileUri || (params.transcriptText && params.transcriptText.trim().length > 30));
-  const effectiveTopic = params.topicHint?.trim() || (hasMediaOrPdf ? 'Conteúdo fiel dos arquivos/materiais enviados' : params.subjectName);
+  const hasMultiFiles = Boolean(params.mediaFiles && params.mediaFiles.length > 0);
+  const hasMediaOrPdf = Boolean(
+    hasMultiFiles ||
+      params.pdfBase64 ||
+      params.fileUri ||
+      (params.transcriptText && params.transcriptText.trim().length > 30)
+  );
+  const effectiveTopic =
+    params.topicHint?.trim() || (hasMediaOrPdf ? 'Conteúdo fiel dos arquivos/materiais enviados' : params.subjectName);
+  const attachedFilesHint = hasMultiFiles
+    ? `\nARQUIVOS ANEXADOS (${params.mediaFiles!.length}): ${params.mediaFiles!
+        .map((f, i) => `${i + 1}. ${f.name || f.mimeType}`)
+        .join(' | ')}\nIntegre TODOS os áudios, vídeos e PDFs em uma sequência didática unificada e completa.\n`
+    : '';
 
   const feynmanSlideSpec = `ESTRUTURA OBRIGATÓRIA DE CADA SLIDE (PADRÃO FEYNMAN PROFUNDO):
 - "category": Categoria curta em MAIÚSCULAS (ex: "FUNDAMENTOS", "OPERAÇÕES", "APLICAÇÃO").
@@ -259,7 +290,7 @@ REGRA CRÍTICA DE FIDELIDADE:
 - NUNCA fale sobre "estudo livre", "autodidatismo" ou "técnicas de estudo", a menos que o material enviado seja explicitamente sobre isso.
 
 CONTEÚDO / ANOTAÇÕES ENVIADAS PELO ALUNO:
-${params.transcriptText?.slice(0, 14000) || 'Analise integralmente o PDF ou vídeo/áudio anexado.'}
+${attachedFilesHint}${params.transcriptText?.slice(0, 14000) || 'Analise integralmente todos os PDFs, áudios ou vídeos anexados.'}
 
 Gere ${params.targetMinutes <= 1 ? '4' : '6'} slides profundos seguindo:
 ${feynmanSlideSpec}`
@@ -268,11 +299,11 @@ Tema / Foco: "${effectiveTopic}".
 Abordagem: ${params.technique}.
 
 REGRA CRÍTICA DE FIDELIDADE:
-- Extraia os tópicos REAIS dos arquivos enviados e aprofunde com fontes acadêmicas confiáveis.
+- Extraia os tópicos REAIS de todos os arquivos enviados e aprofunde com fontes acadêmicas confiáveis.
 - NUNCA invente aulas sobre "estudo livre" ou "autodidatismo". Ensine EXCLUSIVAMENTE a matéria real do material enviado.
 
 CONTEÚDO / ANOTAÇÕES ENVIADAS PELO ALUNO:
-${params.transcriptText?.slice(0, 14000) || 'Analise integralmente o PDF ou vídeo/áudio anexado.'}
+${attachedFilesHint}${params.transcriptText?.slice(0, 14000) || 'Analise integralmente todos os PDFs, áudios ou vídeos anexados.'}
 
 FAÇA DUAS COISAS AGORA:
 1. Divida o conteúdo real em 4 a 6 MÓDULOS progressivos ("modules").
@@ -287,6 +318,7 @@ ${feynmanSlideSpec}`;
         pdfBase64: params.pdfBase64,
         fileUri: params.fileUri,
         fileMimeType: params.fileMimeType,
+        mediaFiles: params.mediaFiles,
       }),
     },
   ];
@@ -374,6 +406,7 @@ export async function generateAnimatedLessonModule(params: {
   contextText: string;
   fileUri?: string;
   fileMimeType?: string;
+  mediaFiles?: MediaFileRef[];
 }): Promise<AnimatedScene[]> {
   const ai = getAi();
   const prompt = `Você continua a aula completa "${params.lessonTitle}" (Técnica: ${params.technique}).
@@ -395,6 +428,7 @@ Para cada slide preencha rigorosamente:
           prompt,
           fileUri: params.fileUri,
           fileMimeType: params.fileMimeType,
+          mediaFiles: params.mediaFiles,
         }),
       },
     ],

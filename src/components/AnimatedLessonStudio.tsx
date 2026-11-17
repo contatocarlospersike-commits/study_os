@@ -14,6 +14,7 @@ import {
   Upload,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react';
 import { api } from '../api/client';
 import type { AnimatedLesson, AnimatedScene, Subject } from '../types';
@@ -21,6 +22,16 @@ import type { AnimatedLesson, AnimatedScene, Subject } from '../types';
 interface AnimatedLessonStudioProps {
   subjects: Subject[];
   onNotify: (title: string, msg: string) => void;
+}
+
+interface UploadedAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  progress: number;
+  status: 'uploading' | 'processing' | 'ready' | 'error';
+  uri?: string;
+  error?: string;
 }
 
 function sanitizeSvg(raw?: string): string | null {
@@ -221,15 +232,9 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const [transcriptText, setTranscriptText] = useState('');
   const [targetMinutes, setTargetMinutes] = useState<number>(30);
   const [technique, setTechnique] = useState('Feynman + Diagramas + Exemplos');
-  const [pdfBase64, setPdfBase64] = useState<string | undefined>();
-  const [pdfName, setPdfName] = useState('');
 
-  // Direct MP4 / Audio Upload to Gemini Files API
-  const [mediaFileName, setMediaFileName] = useState('');
-  const [mediaProgress, setMediaProgress] = useState<number | null>(null);
-  const [mediaStatusText, setMediaStatusText] = useState('');
-  const [uploadedFileUri, setUploadedFileUri] = useState<string | undefined>();
-  const [uploadedMimeType, setUploadedMimeType] = useState<string | undefined>();
+  // Direct Multi-File Upload (PDFs, Audios, Videos) to Gemini Files API
+  const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
 
   const [generating, setGenerating] = useState(false);
   const [genSeconds, setGenSeconds] = useState(0);
@@ -316,16 +321,13 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
     }
   };
 
-  const handleMediaSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setMediaFileName(file.name);
-    setMediaProgress(0);
-    setMediaStatusText('Enviando direto para o Google Gemini...');
-    setUploadedFileUri(undefined);
+  const updateAttachment = (id: string, patch: Partial<UploadedAttachment>) => {
+    setAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+  };
 
+  const uploadSingleFileToGemini = async (file: File, id: string, fallbackMime: string) => {
+    const mimeType = file.type || fallbackMime;
     try {
-      const mimeType = file.type || 'video/mp4';
       const { uploadUrl } = await api.startMediaUpload({
         filename: file.name,
         mime_type: mimeType,
@@ -338,7 +340,9 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
         xhr.setRequestHeader('X-Goog-Upload-Offset', '0');
         xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize');
         xhr.upload.onprogress = (evt) => {
-          if (evt.lengthComputable) setMediaProgress(Math.round((evt.loaded / evt.total) * 100));
+          if (evt.lengthComputable) {
+            updateAttachment(id, { progress: Math.round((evt.loaded / evt.total) * 100) });
+          }
         };
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
@@ -354,53 +358,63 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
       const fileName = uploadedData.file?.name;
       let uri = uploadedData.file?.uri;
       if (fileName) {
-        setMediaStatusText('Processando no Gemini...');
-        for (let i = 0; i < 15; i++) {
+        updateAttachment(id, { status: 'processing', progress: 100 });
+        for (let i = 0; i < 20; i++) {
           const st = await api.checkMediaStatus(fileName);
           if (st.state === 'ACTIVE') {
             uri = st.uri;
             break;
           }
-          await new Promise((r) => setTimeout(r, 2000));
+          if (st.state === 'FAILED') {
+            throw new Error('Falha ao processar arquivo no Gemini.');
+          }
+          await new Promise((r) => setTimeout(r, 1500));
         }
       }
       if (!uri) throw new Error('URI de mídia indisponível.');
-      setUploadedFileUri(uri);
-      setUploadedMimeType(mimeType);
-      setMediaStatusText('Mídia pronta!');
+      updateAttachment(id, { status: 'ready', progress: 100, uri });
     } catch (err) {
-      setMediaStatusText('');
-      setMediaProgress(null);
-      onNotify('Erro no upload', (err as Error).message);
+      const msg = (err as Error).message || 'Erro no upload';
+      updateAttachment(id, { status: 'error', error: msg });
+      onNotify(`Erro em ${file.name}`, msg);
     }
   };
 
-  const handlePdfSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 3.2 * 1024 * 1024) {
-      setGenError('PDF acima de 3,2 MB excede o limite da Vercel. Suba na aba Materiais ou envie um PDF menor.');
-      return;
-    }
+  const handleFilesSelect = (e: React.ChangeEvent<HTMLInputElement>, fallbackMime: string) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
     setGenError('');
-    setPdfName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const r = String(reader.result || '');
-      setPdfBase64(r.includes(',') ? r.split(',')[1] : r);
-    };
-    reader.readAsDataURL(file);
+
+    const newItems: UploadedAttachment[] = files.map((file, idx) => ({
+      id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+      name: file.name,
+      mimeType: file.type || fallbackMime,
+      progress: 0,
+      status: 'uploading',
+    }));
+
+    setAttachments((prev) => [...prev, ...newItems]);
+    files.forEach((file, idx) => {
+      void uploadSingleFileToGemini(file, newItems[idx].id, fallbackMime);
+    });
   };
 
-  const expandRemainingModules = async (deck: AnimatedLesson, fileUri?: string, mime?: string) => {
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const expandRemainingModules = async (
+    deck: AnimatedLesson,
+    mediaFiles?: Array<{ uri: string; mime_type: string; name?: string }>
+  ) => {
     for (const mod of deck.modules) {
       if (mod.expanded) continue;
       setExpandingModuleIdx(mod.index);
       try {
         const res = await api.expandAnimatedLessonModule(deck.id, {
           module_index: mod.index,
-          file_uri: fileUri,
-          file_mime_type: mime,
+          media_files: mediaFiles,
         });
         setActiveDeck((prev) =>
           prev && prev.id === deck.id ? { ...prev, modules: res.modules, scenes: res.scenes } : prev
@@ -419,12 +433,16 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
     e.preventDefault();
     if (generating) return;
     setGenError('');
-    if (mediaProgress !== null && !uploadedFileUri) {
-      setGenError('Espere o upload da mídia concluir antes de gerar os slides.');
+    if (attachments.some((a) => a.status === 'uploading' || a.status === 'processing')) {
+      setGenError('Espere todos os arquivos terminarem de enviar/processar antes de gerar os slides.');
       return;
     }
-    if (!topicHint.trim() && !transcriptText.trim() && !pdfBase64 && !uploadedFileUri && !subjectId) {
-      setGenError('Escolha uma matéria, digite o tema ou suba um arquivo.');
+    const readyFiles = attachments
+      .filter((a) => a.status === 'ready' && a.uri)
+      .map((a) => ({ uri: a.uri!, mime_type: a.mimeType, name: a.name }));
+
+    if (!topicHint.trim() && !transcriptText.trim() && readyFiles.length === 0 && !subjectId) {
+      setGenError('Escolha uma matéria, digite o tema ou suba pelo menos um arquivo.');
       return;
     }
     setGenerating(true);
@@ -433,9 +451,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
         subject_id: subjectId || null,
         topic_hint: topicHint.trim(),
         transcript_text: transcriptText.trim(),
-        pdf_base64: pdfBase64,
-        file_uri: uploadedFileUri,
-        file_mime_type: uploadedMimeType,
+        media_files: readyFiles.length > 0 ? readyFiles : undefined,
         target_minutes: targetMinutes,
         technique,
       });
@@ -444,7 +460,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
       setSlideIdx(0);
       onNotify('Slides gerados!', 'Os primeiros slides já estão prontos — demais módulos carregam em segundo plano.');
       if (created.modules.some((m) => !m.expanded)) {
-        void expandRemainingModules(created, uploadedFileUri, uploadedMimeType);
+        void expandRemainingModules(created, readyFiles.length > 0 ? readyFiles : undefined);
       }
     } catch (err) {
       const msg = (err as Error).message || 'Erro ao gerar slides';
@@ -562,36 +578,87 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
             </div>
           </div>
 
-          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70 px-3 py-2 text-xs text-zinc-300 hover:border-indigo-400">
-            <span className="flex items-center gap-2 truncate">
-              <Upload className="h-3.5 w-3.5 text-cyan-400" />
-              {mediaFileName || 'Subir MP4 / Áudio (até 2 GB)'}
-            </span>
-            <input
-              type="file"
-              accept="video/mp4,video/webm,video/quicktime,audio/*"
-              onChange={handleMediaSelect}
-              className="hidden"
-            />
-          </label>
-          {mediaProgress !== null && (
-            <div className="space-y-1">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
-                <div className="h-full bg-cyan-400 transition-all" style={{ width: `${mediaProgress}%` }} />
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70 px-2.5 py-2 text-[11px] text-zinc-300 hover:border-cyan-400">
+              <Upload className="h-3.5 w-3.5 shrink-0 text-cyan-400" />
+              <span className="truncate">+ Áudios / Vídeos</span>
+              <input
+                type="file"
+                multiple
+                accept="video/mp4,video/webm,video/quicktime,audio/*"
+                onChange={(e) => handleFilesSelect(e, 'audio/mpeg')}
+                className="hidden"
+              />
+            </label>
+
+            <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70 px-2.5 py-2 text-[11px] text-zinc-300 hover:border-indigo-400">
+              <Upload className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+              <span className="truncate">+ PDFs / Slides</span>
+              <input
+                type="file"
+                multiple
+                accept="application/pdf"
+                onChange={(e) => handleFilesSelect(e, 'application/pdf')}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          {attachments.length > 0 && (
+            <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950/60 p-2">
+              <div className="flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                <span>Arquivos na fila ({attachments.length})</span>
+                <span>{attachments.filter((a) => a.status === 'ready').length} prontos</span>
               </div>
-              <p className="text-[10px] text-cyan-300">
-                {mediaProgress}% · {mediaStatusText}
-              </p>
+              {attachments.map((att) => {
+                const isPdf = att.mimeType.includes('pdf');
+                return (
+                  <div
+                    key={att.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800/80 bg-zinc-900/70 px-2 py-1.5 text-[11px]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase ${
+                            isPdf ? 'bg-indigo-500/20 text-indigo-300' : 'bg-cyan-500/20 text-cyan-300'
+                          }`}
+                        >
+                          {isPdf ? 'PDF' : 'Mídia'}
+                        </span>
+                        <span className="truncate text-zinc-200">{att.name}</span>
+                      </div>
+                      {att.status === 'uploading' && (
+                        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-zinc-800">
+                          <div className="h-full bg-cyan-400 transition-all" style={{ width: `${att.progress}%` }} />
+                        </div>
+                      )}
+                      {att.status === 'processing' && (
+                        <span className="text-[10px] text-amber-300">Processando no Gemini...</span>
+                      )}
+                      {att.status === 'error' && (
+                        <span className="text-[10px] text-rose-300">{att.error || 'Erro'}</span>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {att.status === 'ready' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
+                      {(att.status === 'uploading' || att.status === 'processing') && (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-400" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(att.id)}
+                        className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                        title="Remover arquivo"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
-
-          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70 px-3 py-2 text-xs text-zinc-300 hover:border-indigo-400">
-            <span className="flex items-center gap-2 truncate">
-              <Upload className="h-3.5 w-3.5 text-indigo-400" />
-              {pdfName || 'Subir PDF de slides (opcional)'}
-            </span>
-            <input type="file" accept="application/pdf" onChange={handlePdfSelect} className="hidden" />
-          </label>
 
           <textarea
             rows={3}

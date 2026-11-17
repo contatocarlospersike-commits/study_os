@@ -413,6 +413,7 @@ export const api = {
     pdf_base64?: string;
     file_uri?: string;
     file_mime_type?: string;
+    media_files?: Array<{ uri: string; mime_type: string; name?: string }>;
     target_minutes: number;
     technique: string;
   }) =>
@@ -422,7 +423,12 @@ export const api = {
     }),
   expandAnimatedLessonModule: (
     lessonId: string,
-    body: { module_index: number; file_uri?: string; file_mime_type?: string }
+    body: {
+      module_index: number;
+      file_uri?: string;
+      file_mime_type?: string;
+      media_files?: Array<{ uri: string; mime_type: string; name?: string }>;
+    }
   ) =>
     request<{ modules: AnimatedLessonModule[]; scenes: AnimatedScene[] }>(
       `/api/cognitive/animated-lessons/${lessonId}/expand-module`,
