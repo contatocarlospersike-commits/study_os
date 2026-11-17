@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CalendarPlus,
   CheckCircle2,
+  Film,
   GraduationCap,
   Loader2,
   Sliders,
@@ -16,6 +17,7 @@ import {
   MessageSquareText,
 } from 'lucide-react';
 import { api } from '../api/client';
+import { AnimatedLessonStudio } from './AnimatedLessonStudio';
 import type {
   ChecklistItem,
   DailyPlanResponse,
@@ -94,7 +96,7 @@ interface ProfessorPlannerProps {
 }
 
 export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, onNotify }) => {
-  const [subTab, setSubTab] = useState<'feynman' | 'professor' | 'planner' | 'calibration'>('feynman');
+  const [subTab, setSubTab] = useState<'animated' | 'feynman' | 'professor' | 'planner' | 'calibration'>('animated');
 
   // Multimodal Feynman Pipeline (PDF slides + transcript)
   const [feynmanLessons, setFeynmanLessons] = useState<FeynmanLesson[]>([]);
@@ -342,8 +344,9 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
 
         <div className="flex flex-wrap gap-1.5 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800">
           {[
-            { id: 'feynman', label: 'Aula Feynman (PDF + Áudio)', icon: Sparkles },
-            { id: 'professor', label: 'Carlos Creator (YouTube)', icon: BrainCircuit },
+            { id: 'animated', label: 'Vídeo-Aula Animada', icon: Film },
+            { id: 'feynman', label: 'Aula Feynman (PDF)', icon: Sparkles },
+            { id: 'professor', label: 'Carlos Creator', icon: BrainCircuit },
             { id: 'planner', label: 'Planejador & Agenda', icon: CalendarClock },
             { id: 'calibration', label: 'Calibração', icon: Sliders },
           ].map((tab) => {
@@ -366,6 +369,9 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
           })}
         </div>
       </div>
+
+      {/* SUBTAB -1: VÍDEO-AULA ANIMADA INTERATIVA */}
+      {subTab === 'animated' && <AnimatedLessonStudio subjects={subjects} onNotify={onNotify} />}
 
       {/* SUBTAB 0: PIPELINE FEYNMAN MULTIMODAL (PDF SLIDES + TRANSCRIÇÃO) */}
       {subTab === 'feynman' && (

@@ -482,3 +482,43 @@ export interface FeynmanLesson {
   workspace_note_id?: string | null;
   created_at: string;
 }
+
+export interface AnimatedVisualNode {
+  label: string;
+  detail: string;
+  kind: 'core' | 'analogy' | 'example' | 'warning' | 'connection';
+}
+
+export interface AnimatedScene {
+  id: string;
+  module_index: number;
+  scene_title: string;
+  duration_sec: number;
+  narration: string;
+  visual_nodes: AnimatedVisualNode[];
+  connections: Array<{ from: string; to: string; label: string }>;
+  key_takeaway: string;
+  sources_hint: string;
+}
+
+export interface AnimatedLessonModule {
+  index: number;
+  title: string;
+  goal: string;
+  minutes: number;
+  expanded: boolean;
+}
+
+export interface AnimatedLesson {
+  id: string;
+  subject_id: string | null;
+  subject_name?: string | null;
+  title: string;
+  target_minutes: number;
+  technique: string;
+  source_summary: string;
+  modules: AnimatedLessonModule[];
+  scenes: AnimatedScene[];
+  created_at: string;
+  updated_at: string;
+}

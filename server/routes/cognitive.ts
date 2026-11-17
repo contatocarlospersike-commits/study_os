@@ -9,6 +9,14 @@ import {
   suggestObsidianLinks,
 } from '../services/cognitiveAi.js';
 import { runFeynmanWorkflow } from '../services/feynmanPipeline.js';
+import {
+  checkGeminiFileStatus,
+  generateAnimatedLessonInitial,
+  generateAnimatedLessonModule,
+  startGeminiResumableUpload,
+  type AnimatedScene,
+  type LessonModule,
+} from '../services/animatedLessonAi.js';
 
 export const cognitiveRouter = Router();
 
@@ -366,6 +374,250 @@ cognitiveRouter.post('/feynman-lessons/generate', async (req, res) => {
 
 cognitiveRouter.delete('/feynman-lessons/:id', async (req, res) => {
   await execute(`DELETE FROM feynman_lessons WHERE id = ? AND user_id = ?`, [
+    req.params.id,
+    req.userId,
+  ]);
+  res.json({ ok: true });
+});
+
+// --- Direct Media Upload (MP4/Audio up to 2GB via Google Gemini Files API) ---
+cognitiveRouter.post('/media/start-upload', async (req, res) => {
+  const { filename, mime_type = 'video/mp4', size_bytes = 0 } = req.body as {
+    filename?: string;
+    mime_type?: string;
+    size_bytes?: number;
+  };
+  if (!size_bytes || size_bytes <= 0) {
+    res.status(400).json({ error: 'size_bytes inválido.' });
+    return;
+  }
+  const result = await startGeminiResumableUpload({
+    filename: filename || 'aula.mp4',
+    mimeType: mime_type,
+    sizeBytes: Number(size_bytes),
+  });
+  res.json(result);
+});
+
+cognitiveRouter.get('/media/status', async (req, res) => {
+  const name = typeof req.query.name === 'string' ? req.query.name : '';
+  if (!name) {
+    res.status(400).json({ error: 'name é obrigatório.' });
+    return;
+  }
+  const status = await checkGeminiFileStatus(name);
+  res.json(status);
+});
+
+// --- Animated Interactive Video Lessons (30s Demo to 60min Deep Masterclass) ---
+cognitiveRouter.get('/animated-lessons', async (req, res) => {
+  const rows = await queryAll<Record<string, unknown>>(
+    `SELECT al.*, s.name as subject_name
+     FROM animated_lessons al
+     LEFT JOIN subjects s ON s.id = al.subject_id
+     WHERE al.user_id = ?
+     ORDER BY al.updated_at DESC LIMIT 25`,
+    [req.userId]
+  );
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      modules: JSON.parse(String(r.modules_json || '[]')),
+      scenes: JSON.parse(String(r.scenes_json || '[]')),
+    }))
+  );
+});
+
+cognitiveRouter.post('/animated-lessons/generate', async (req, res) => {
+  const {
+    subject_id = null,
+    topic_hint = '',
+    transcript_text = '',
+    pdf_base64,
+    file_uri,
+    file_mime_type,
+    target_minutes = 5,
+    technique = 'Feynman + Conexões Visuais',
+  } = req.body as {
+    subject_id?: string | null;
+    topic_hint?: string;
+    transcript_text?: string;
+    pdf_base64?: string;
+    file_uri?: string;
+    file_mime_type?: string;
+    target_minutes?: number;
+    technique?: string;
+  };
+
+  let subjectName = 'Estudo Livre';
+  let extraContext = transcript_text || '';
+  if (subject_id) {
+    const sub = await queryOne<{ name: string }>(`SELECT name FROM subjects WHERE id = ? AND user_id = ?`, [
+      subject_id,
+      req.userId,
+    ]);
+    if (sub) subjectName = sub.name;
+    const chunks = await queryAll<{ content: string }>(
+      `SELECT content FROM document_chunks WHERE subject_id = ? AND user_id = ? LIMIT 8`,
+      [subject_id, req.userId]
+    );
+    if (chunks.length > 0) {
+      extraContext = `${extraContext}\n\n${chunks.map((c) => c.content.slice(0, 500)).join('\n')}`.trim();
+    }
+  }
+
+  const generated = await generateAnimatedLessonInitial({
+    subjectName,
+    topicHint: topic_hint || subjectName,
+    transcriptText: extraContext,
+    pdfBase64: pdf_base64,
+    fileUri: file_uri,
+    fileMimeType: file_mime_type,
+    targetMinutes: Number(target_minutes) || 5,
+    technique,
+  });
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await execute(
+    `INSERT INTO animated_lessons (id, user_id, subject_id, title, target_minutes, technique, source_summary, modules_json, scenes_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      req.userId,
+      subject_id || null,
+      generated.title,
+      Number(target_minutes) || 5,
+      technique,
+      generated.source_summary,
+      JSON.stringify(generated.modules),
+      JSON.stringify(generated.scenes),
+      now,
+      now,
+    ]
+  );
+
+  res.status(201).json({
+    id,
+    subject_id,
+    subject_name: subjectName,
+    title: generated.title,
+    target_minutes: Number(target_minutes) || 5,
+    technique,
+    source_summary: generated.source_summary,
+    modules: generated.modules,
+    scenes: generated.scenes,
+    created_at: now,
+    updated_at: now,
+  });
+});
+
+cognitiveRouter.post('/animated-lessons/:id/expand-module', async (req, res) => {
+  const { module_index, file_uri, file_mime_type } = req.body as {
+    module_index: number;
+    file_uri?: string;
+    file_mime_type?: string;
+  };
+  const lesson = await queryOne<Record<string, unknown>>(
+    `SELECT * FROM animated_lessons WHERE id = ? AND user_id = ?`,
+    [req.params.id, req.userId]
+  );
+  if (!lesson) {
+    res.status(404).json({ error: 'Aula animada não encontrada.' });
+    return;
+  }
+
+  const modules = JSON.parse(String(lesson.modules_json || '[]')) as LessonModule[];
+  const existingScenes = JSON.parse(String(lesson.scenes_json || '[]')) as AnimatedScene[];
+  const targetMod = modules.find((m) => m.index === module_index);
+  if (!targetMod) {
+    res.status(404).json({ error: 'Módulo não encontrado.' });
+    return;
+  }
+
+  if (targetMod.expanded) {
+    res.json({ modules, scenes: existingScenes });
+    return;
+  }
+
+  let contextText = String(lesson.source_summary || '');
+  if (lesson.subject_id) {
+    const chunks = await queryAll<{ content: string }>(
+      `SELECT content FROM document_chunks WHERE subject_id = ? AND user_id = ? LIMIT 8`,
+      [String(lesson.subject_id), req.userId]
+    );
+    if (chunks.length > 0) {
+      contextText += '\n\n' + chunks.map((c) => c.content.slice(0, 500)).join('\n');
+    }
+  }
+
+  const newScenes = await generateAnimatedLessonModule({
+    lessonTitle: String(lesson.title),
+    moduleIndex: module_index,
+    moduleTitle: targetMod.title,
+    moduleGoal: targetMod.goal,
+    moduleMinutes: targetMod.minutes,
+    technique: String(lesson.technique),
+    contextText,
+    fileUri: file_uri,
+    fileMimeType: file_mime_type,
+  });
+
+  const nextModules = modules.map((m) => (m.index === module_index ? { ...m, expanded: true } : m));
+  const nextScenes = [...existingScenes, ...newScenes];
+  const now = new Date().toISOString();
+
+  await execute(
+    `UPDATE animated_lessons SET modules_json = ?, scenes_json = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    [JSON.stringify(nextModules), JSON.stringify(nextScenes), now, req.params.id, req.userId]
+  );
+
+  res.json({ modules: nextModules, scenes: nextScenes });
+});
+
+cognitiveRouter.post('/animated-lessons/:id/save-workspace', async (req, res) => {
+  const { subject_id } = req.body as { subject_id?: string };
+  const lesson = await queryOne<Record<string, unknown>>(
+    `SELECT * FROM animated_lessons WHERE id = ? AND user_id = ?`,
+    [req.params.id, req.userId]
+  );
+  if (!lesson) {
+    res.status(404).json({ error: 'Aula não encontrada.' });
+    return;
+  }
+  const targetSubjectId = subject_id || (lesson.subject_id ? String(lesson.subject_id) : null);
+  if (!targetSubjectId) {
+    res.status(400).json({ error: 'Selecione uma matéria/projeto para salvar no Workspace.' });
+    return;
+  }
+
+  const scenes = JSON.parse(String(lesson.scenes_json || '[]')) as AnimatedScene[];
+  const md = [
+    `> Aula Animada (${lesson.target_minutes} min · ${lesson.technique})`,
+    String(lesson.source_summary || ''),
+    ...scenes.map(
+      (sc, i) =>
+        `## ${i + 1}. ${sc.scene_title}\n${sc.narration}\n\n${sc.visual_nodes
+          .map((n) => `- **${n.label}:** ${n.detail}`)
+          .join('\n')}\n\n> **Ponto-chave:** ${sc.key_takeaway}`
+    ),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const noteId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await execute(
+    `INSERT INTO notes (id, user_id, subject_id, parent_id, title, icon, cover_style, page_type, status, content_markdown, created_at, updated_at)
+     VALUES (?, ?, ?, NULL, ?, '🎬', '', 'note', 'active', ?, ?, ?)`,
+    [noteId, req.userId, targetSubjectId, `Aula: ${String(lesson.title)}`, md, now, now]
+  );
+
+  res.status(201).json({ ok: true, noteId });
+});
+
+cognitiveRouter.delete('/animated-lessons/:id', async (req, res) => {
+  await execute(`DELETE FROM animated_lessons WHERE id = ? AND user_id = ?`, [
     req.params.id,
     req.userId,
   ]);

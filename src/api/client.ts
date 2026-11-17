@@ -1,6 +1,9 @@
 import { supabase } from '../lib/supabase';
 import type {
   AnalyticsData,
+  AnimatedLesson,
+  AnimatedLessonModule,
+  AnimatedScene,
   AutomationSettings,
   Book,
   ChatMessage,
@@ -392,4 +395,44 @@ export const api = {
     }),
   deleteFeynmanLesson: (id: string) =>
     request<{ ok: boolean }>(`/api/cognitive/feynman-lessons/${id}`, { method: 'DELETE' }),
+
+  startMediaUpload: (body: { filename: string; mime_type: string; size_bytes: number }) =>
+    request<{ uploadUrl: string }>('/api/cognitive/media/start-upload', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  checkMediaStatus: (name: string) =>
+    request<{ state: string; uri: string; mimeType: string }>(
+      `/api/cognitive/media/status?name=${encodeURIComponent(name)}`
+    ),
+  getAnimatedLessons: () => request<AnimatedLesson[]>('/api/cognitive/animated-lessons'),
+  generateAnimatedLesson: (body: {
+    subject_id?: string | null;
+    topic_hint?: string;
+    transcript_text?: string;
+    pdf_base64?: string;
+    file_uri?: string;
+    file_mime_type?: string;
+    target_minutes: number;
+    technique: string;
+  }) =>
+    request<AnimatedLesson>('/api/cognitive/animated-lessons/generate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  expandAnimatedLessonModule: (
+    lessonId: string,
+    body: { module_index: number; file_uri?: string; file_mime_type?: string }
+  ) =>
+    request<{ modules: AnimatedLessonModule[]; scenes: AnimatedScene[] }>(
+      `/api/cognitive/animated-lessons/${lessonId}/expand-module`,
+      { method: 'POST', body: JSON.stringify(body) }
+    ),
+  saveAnimatedLessonToWorkspace: (lessonId: string, subjectId?: string) =>
+    request<{ ok: boolean; noteId: string }>(
+      `/api/cognitive/animated-lessons/${lessonId}/save-workspace`,
+      { method: 'POST', body: JSON.stringify({ subject_id: subjectId }) }
+    ),
+  deleteAnimatedLesson: (id: string) =>
+    request<{ ok: boolean }>(`/api/cognitive/animated-lessons/${id}`, { method: 'DELETE' }),
 };

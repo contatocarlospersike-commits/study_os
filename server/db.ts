@@ -89,6 +89,7 @@ export async function initDatabase(): Promise<void> {
 
   // Fast-path: if the latest schema tables/columns already exist, skip 25+ DDL statements on cold start
   try {
+    await queryOne(`SELECT 1 FROM animated_lessons LIMIT 1`);
     await queryOne(`SELECT 1 FROM feynman_lessons LIMIT 1`);
     await queryOne(`SELECT cover_style FROM books LIMIT 1`);
     await queryOne(`SELECT kind FROM subjects LIMIT 1`);
@@ -410,6 +411,20 @@ export async function initDatabase(): Promise<void> {
       source_filename TEXT NOT NULL DEFAULT '',
       model_used TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS animated_lessons (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      subject_id TEXT REFERENCES subjects(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      target_minutes REAL NOT NULL DEFAULT 5,
+      technique TEXT NOT NULL DEFAULT 'feynman',
+      source_summary TEXT NOT NULL DEFAULT '',
+      modules_json TEXT NOT NULL DEFAULT '[]',
+      scenes_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
   `);
 
