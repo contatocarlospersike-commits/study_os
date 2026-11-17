@@ -435,4 +435,9 @@ export const api = {
     ),
   deleteAnimatedLesson: (id: string) =>
     request<{ ok: boolean }>(`/api/cognitive/animated-lessons/${id}`, { method: 'DELETE' }),
+  generateTts: (body: { text: string; voice?: string }) =>
+    request<{ audio_base64: string; mime_type: string }>('/api/cognitive/tts', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

@@ -13,6 +13,7 @@ import {
   checkGeminiFileStatus,
   generateAnimatedLessonInitial,
   generateAnimatedLessonModule,
+  generateNeuralSpeechWav,
   startGeminiResumableUpload,
   type AnimatedScene,
   type LessonModule,
@@ -622,4 +623,14 @@ cognitiveRouter.delete('/animated-lessons/:id', async (req, res) => {
     req.userId,
   ]);
   res.json({ ok: true });
+});
+
+cognitiveRouter.post('/tts', async (req, res) => {
+  const { text, voice = 'Puck' } = req.body as { text?: string; voice?: string };
+  if (!text || !text.trim()) {
+    res.status(400).json({ error: 'text é obrigatório.' });
+    return;
+  }
+  const { wavBase64 } = await generateNeuralSpeechWav({ text: text.trim(), voiceName: voice });
+  res.json({ audio_base64: wavBase64, mime_type: 'audio/wav' });
 });

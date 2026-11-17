@@ -150,9 +150,12 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [rate, setRate] = useState(1.1);
+  const [voiceName, setVoiceName] = useState<'Puck' | 'Kore' | 'Aoede'>('Puck');
   const [visibleNodesCount, setVisibleNodesCount] = useState(1);
   const [sceneElapsedSec, setSceneElapsedSec] = useState(0);
   const timerRef = useRef<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsCacheRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (!subjectId && subjects[0]?.id) setSubjectId(subjects[0].id);
@@ -169,6 +172,11 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   }, []);
 
   const stopSpeech = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
@@ -185,11 +193,26 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const scenes = activeLesson?.scenes || [];
   const currentScene: AnimatedScene | undefined = scenes[sceneIdx];
 
-  // Synchronized animation + SpeechSynthesis engine
+  // Helper: fetch or return cached Neural TTS WAV URL
+  const getNeuralAudioUrl = async (scene: AnimatedScene, voice: string): Promise<string> => {
+    const key = `${scene.id}:${voice}`;
+    const existing = ttsCacheRef.current.get(key);
+    if (existing) return existing;
+    const res = await api.generateTts({ text: scene.narration, voice });
+    const bin = atob(res.audio_base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([bytes], { type: res.mime_type || 'audio/wav' }));
+    ttsCacheRef.current.set(key, url);
+    return url;
+  };
+
+  // Synchronized animation + Neural Gemini TTS (with natural browser voice fallback)
   useEffect(() => {
     stopSpeech();
     if (!playing || !currentScene) return;
 
+    let cancelled = false;
     setSceneElapsedSec(0);
     setVisibleNodesCount(1);
 
@@ -206,9 +229,10 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
     }, 1000);
     timerRef.current = secTimer;
 
-    let fallbackTimeout: number | null = null;
+    let fallbackTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const advanceNext = () => {
+      if (cancelled) return;
       if (sceneIdx + 1 < scenes.length) {
         setSceneIdx((i) => i + 1);
       } else {
@@ -216,28 +240,59 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
       }
     };
 
-    if (!muted && typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      const utter = new SpeechSynthesisUtterance(currentScene.narration);
-      utter.lang = 'pt-BR';
-      utter.rate = rate;
-      utter.onend = () => advanceNext();
-      utter.onerror = () => {
-        fallbackTimeout = window.setTimeout(advanceNext, Math.round((totalSec * 1000) / rate));
-      };
-      window.speechSynthesis.speak(utter);
+    const speakBrowserNatural = () => {
+      if (cancelled) return;
+      if ('speechSynthesis' in globalThis) {
+        const voices = globalThis.speechSynthesis.getVoices();
+        const ptVoices = voices.filter((v) => v.lang.toLowerCase().startsWith('pt'));
+        const preferred =
+          ptVoices.find((v) => /google|natural|neural|luciana|francisca|thalita|antonio/i.test(v.name)) ||
+          ptVoices[0];
+        const utter = new SpeechSynthesisUtterance(currentScene.narration);
+        utter.lang = 'pt-BR';
+        if (preferred) utter.voice = preferred;
+        utter.rate = rate;
+        utter.pitch = 1.04;
+        utter.onend = () => advanceNext();
+        utter.onerror = () => {
+          fallbackTimeout = setTimeout(advanceNext, Math.round((totalSec * 1000) / rate));
+        };
+        globalThis.speechSynthesis.speak(utter);
+      } else {
+        fallbackTimeout = setTimeout(advanceNext, Math.round((totalSec * 1000) / rate));
+      }
+    };
+
+    if (!muted) {
+      getNeuralAudioUrl(currentScene, voiceName)
+        .then((url) => {
+          if (cancelled) return;
+          const audio = new Audio(url);
+          audio.playbackRate = rate;
+          audioRef.current = audio;
+          audio.onended = () => advanceNext();
+          audio.onerror = () => speakBrowserNatural();
+          void audio.play().catch(() => speakBrowserNatural());
+
+          // Pre-warm next scene TTS in background for zero gap
+          const nextSc = scenes[sceneIdx + 1];
+          if (nextSc) void getNeuralAudioUrl(nextSc, voiceName).catch(() => {});
+        })
+        .catch(() => {
+          speakBrowserNatural();
+        });
     } else {
-      fallbackTimeout = window.setTimeout(advanceNext, Math.round((totalSec * 1000) / rate));
+      fallbackTimeout = setTimeout(advanceNext, Math.round((totalSec * 1000) / rate));
     }
 
     return () => {
+      cancelled = true;
       window.clearInterval(nodeTimer);
       window.clearInterval(secTimer);
       if (fallbackTimeout) window.clearTimeout(fallbackTimeout);
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
+      stopSpeech();
     };
-  }, [playing, sceneIdx, currentScene?.id, muted, rate, scenes.length]);
+  }, [playing, sceneIdx, currentScene?.id, muted, rate, voiceName, scenes.length]);
 
   const handleMediaSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -747,6 +802,16 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <select
+                      value={voiceName}
+                      onChange={(e) => setVoiceName(e.target.value as 'Puck' | 'Kore' | 'Aoede')}
+                      className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-200"
+                      title="Estilo de voz neural"
+                    >
+                      <option value="Puck">Voz: Dinâmica (Puck)</option>
+                      <option value="Kore">Voz: Professor (Kore)</option>
+                      <option value="Aoede">Voz: Didática (Aoede)</option>
+                    </select>
                     <button
                       type="button"
                       onClick={() => setMuted((m) => !m)}

@@ -367,3 +367,67 @@ Gere 4 a 5 cenas sequenciais ricas (~${Math.round((params.moduleMinutes * 60) / 
     module_index: params.moduleIndex,
   }));
 }
+
+function pcm16ToWavBase64(pcmBase64: string, sampleRate = 24000): string {
+  const pcmBuf = Buffer.from(pcmBase64, 'base64');
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + pcmBuf.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16); // PCM chunk size
+  header.writeUInt16LE(1, 20); // PCM format
+  header.writeUInt16LE(1, 22); // mono
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28); // byte rate
+  header.writeUInt16LE(2, 32); // block align
+  header.writeUInt16LE(16, 34); // bits per sample
+  header.write('data', 36);
+  header.writeUInt32LE(pcmBuf.length, 40);
+  return Buffer.concat([header, pcmBuf]).toString('base64');
+}
+
+export async function generateNeuralSpeechWav(params: {
+  text: string;
+  voiceName?: string;
+}): Promise<{ wavBase64: string }> {
+  const ai = getAi();
+  const ttsModel = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts';
+  const voice = params.voiceName || 'Puck';
+
+  const res = await ai.models.generateContent({
+    model: ttsModel,
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: `Leia em Português do Brasil com entonação natural, dinâmica, envolvente e didática de professor/apresentador:\n\n${params.text.slice(0, 2500)}`,
+          },
+        ],
+      },
+    ],
+    config: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: voice },
+        },
+      },
+    },
+  });
+
+  const part = res.candidates?.[0]?.content?.parts?.find(
+    (p) => (p as { inlineData?: { data?: string } })?.inlineData?.data
+  ) as { inlineData?: { data: string; mimeType?: string } } | undefined;
+
+  if (!part?.inlineData?.data) {
+    throw new Error('Modelo TTS não retornou áudio.');
+  }
+
+  const mime = part.inlineData.mimeType || '';
+  if (mime.includes('wav')) {
+    return { wavBase64: part.inlineData.data };
+  }
+  return { wavBase64: pcm16ToWavBase64(part.inlineData.data, 24000) };
+}
