@@ -89,7 +89,7 @@ export async function initDatabase(): Promise<void> {
 
   // Fast-path: if the latest schema tables/columns already exist, skip 25+ DDL statements on cold start
   try {
-    await queryOne(`SELECT 1 FROM study_blocks LIMIT 1`);
+    await queryOne(`SELECT 1 FROM feynman_lessons LIMIT 1`);
     await queryOne(`SELECT kind FROM subjects LIMIT 1`);
     return;
   } catch {
@@ -393,6 +393,21 @@ export async function initDatabase(): Promise<void> {
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS feynman_lessons (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      subject_id TEXT REFERENCES subjects(id) ON DELETE SET NULL,
+      titulo_aula TEXT NOT NULL,
+      conceito_central TEXT NOT NULL,
+      analogia_mundo_real TEXT NOT NULL,
+      traducao_tecnica TEXT NOT NULL,
+      armadilhas_comuns_json TEXT NOT NULL DEFAULT '[]',
+      perguntas_active_recall_json TEXT NOT NULL DEFAULT '[]',
+      source_filename TEXT NOT NULL DEFAULT '',
+      model_used TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
     );
   `);
 

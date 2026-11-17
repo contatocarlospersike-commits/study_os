@@ -465,3 +465,19 @@ export interface StudyBlock {
   created_at: string;
   updated_at: string;
 }
+
+export interface FeynmanLesson {
+  id: string;
+  subject_id: string | null;
+  subject_name?: string | null;
+  titulo_aula: string;
+  conceito_central: string;
+  analogia_mundo_real: string;
+  traducao_tecnica: string;
+  armadilhas_comuns: string[];
+  perguntas_active_recall: string[];
+  source_filename?: string;
+  model_used?: string;
+  workspace_note_id?: string | null;
+  created_at: string;
+}

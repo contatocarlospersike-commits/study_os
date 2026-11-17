@@ -204,6 +204,7 @@ export async function askRagTutor(params: {
   subjectId?: string | null;
   subjectName?: string;
   englishPracticeMode?: boolean;
+  modelMode?: 'fast' | 'deep';
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }): Promise<RagAnswer> {
   const ai = getAiClient();
@@ -305,6 +306,38 @@ export async function askRagTutor(params: {
     );
   }
 
+  // Pull Feynman lessons and Study Plan blocks for deeper pedagogical context
+  const feynmanRows = await queryAll<{
+    titulo_aula: string;
+    conceito_central: string;
+    analogia_mundo_real: string;
+    traducao_tecnica: string;
+  }>(
+    params.subjectId
+      ? `SELECT titulo_aula, conceito_central, analogia_mundo_real, traducao_tecnica FROM feynman_lessons WHERE user_id = ? AND subject_id = ? ORDER BY created_at DESC LIMIT 4`
+      : `SELECT titulo_aula, conceito_central, analogia_mundo_real, traducao_tecnica FROM feynman_lessons WHERE user_id = ? ORDER BY created_at DESC LIMIT 4`,
+    params.subjectId ? [params.userId, params.subjectId] : [params.userId]
+  );
+
+  for (const fl of feynmanRows) {
+    contextBlocks.push(
+      `[AULA FEYNMAN "${fl.titulo_aula}" | Página: 1]\nConceito: ${fl.conceito_central}\nAnalogia: ${fl.analogia_mundo_real}\nTécnica: ${fl.traducao_tecnica.slice(0, 500)}`
+    );
+  }
+
+  const blockRows = await queryAll<{ topic: string; lesson_markdown: string }>(
+    params.subjectId
+      ? `SELECT topic, lesson_markdown FROM study_blocks WHERE user_id = ? AND subject_id = ? AND lesson_markdown != '' ORDER BY updated_at DESC LIMIT 3`
+      : `SELECT topic, lesson_markdown FROM study_blocks WHERE user_id = ? AND lesson_markdown != '' ORDER BY updated_at DESC LIMIT 3`,
+    params.subjectId ? [params.userId, params.subjectId] : [params.userId]
+  );
+
+  for (const bl of blockRows) {
+    contextBlocks.push(
+      `[AULA DO PLANO "${bl.topic}" | Página: 1]\n${bl.lesson_markdown.slice(0, 800)}`
+    );
+  }
+
   const contextText =
     contextBlocks.length > 0
       ? contextBlocks.join('\n\n---\n\n')
@@ -330,45 +363,62 @@ REGRAS ANTI-ALUCINAÇÃO (ESTRITAS):
 
   const prompt = `HISTÓRICO RECENTE:\n${historyText || '(início da conversa)'}\n\nMATERIAIS RECUPERADOS:\n${contextText}\n\nPERGUNTA DO ALUNO:\n${params.question}`;
 
-  const draftRes = await withRetry(() =>
-    ai.models.generateContent({
-      model: CHAT_MODEL,
-      contents: prompt,
-      config: {
-        systemInstruction,
-        temperature: 0.15,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            answer: { type: Type.STRING },
-            mermaid_diagram: { type: Type.STRING },
-            grounding_status: {
-              type: Type.STRING,
-              enum: ['grounded', 'partial', 'not_in_materials'],
-            },
-            citations: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  materialTitle: { type: Type.STRING },
-                  pageNumber: { type: Type.INTEGER },
-                  quote: { type: Type.STRING },
+  const chosenModel =
+    params.modelMode === 'deep'
+      ? process.env.GEMINI_DEEP_MODEL || 'gemini-2.5-pro'
+      : CHAT_MODEL;
+
+  const callModel = (modelName: string) =>
+    withRetry(() =>
+      ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+        config: {
+          systemInstruction,
+          temperature: params.modelMode === 'deep' ? 0.2 : 0.15,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              answer: { type: Type.STRING },
+              mermaid_diagram: { type: Type.STRING },
+              grounding_status: {
+                type: Type.STRING,
+                enum: ['grounded', 'partial', 'not_in_materials'],
+              },
+              citations: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    materialTitle: { type: Type.STRING },
+                    pageNumber: { type: Type.INTEGER },
+                    quote: { type: Type.STRING },
+                  },
+                  required: ['materialTitle', 'pageNumber', 'quote'],
                 },
-                required: ['materialTitle', 'pageNumber', 'quote'],
+              },
+              follow_up_questions: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
               },
             },
-            follow_up_questions: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
+            required: ['answer', 'mermaid_diagram', 'grounding_status', 'citations', 'follow_up_questions'],
           },
-          required: ['answer', 'mermaid_diagram', 'grounding_status', 'citations', 'follow_up_questions'],
         },
-      },
-    })
-  );
+      })
+    );
+
+  let draftRes;
+  try {
+    draftRes = await callModel(chosenModel);
+  } catch (err) {
+    if (chosenModel !== CHAT_MODEL) {
+      draftRes = await callModel(CHAT_MODEL);
+    } else {
+      throw err;
+    }
+  }
 
   const draft = JSON.parse(draftRes.text || '{}') as Omit<RagAnswer, 'verified_by_critic'>;
 

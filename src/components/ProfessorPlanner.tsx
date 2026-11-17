@@ -11,6 +11,7 @@ import {
   Sparkles,
   AlertTriangle,
   Trash2,
+  Upload,
   Video,
   MessageSquareText,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import { api } from '../api/client';
 import type {
   ChecklistItem,
   DailyPlanResponse,
+  FeynmanLesson,
   LearningProfile,
   ProfessorEvaluation,
   ProfessorLesson,
@@ -92,7 +94,17 @@ interface ProfessorPlannerProps {
 }
 
 export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, onNotify }) => {
-  const [subTab, setSubTab] = useState<'professor' | 'planner' | 'calibration'>('professor');
+  const [subTab, setSubTab] = useState<'feynman' | 'professor' | 'planner' | 'calibration'>('feynman');
+
+  // Multimodal Feynman Pipeline (PDF slides + transcript)
+  const [feynmanLessons, setFeynmanLessons] = useState<FeynmanLesson[]>([]);
+  const [activeFeynman, setActiveFeynman] = useState<FeynmanLesson | null>(null);
+  const [feynmanTopic, setFeynmanTopic] = useState('');
+  const [feynmanTranscript, setFeynmanTranscript] = useState('');
+  const [feynmanPdfBase64, setFeynmanPdfBase64] = useState<string | undefined>();
+  const [feynmanPdfName, setFeynmanPdfName] = useState('');
+  const [saveToWorkspace, setSaveToWorkspace] = useState(true);
+  const [generatingFeynman, setGeneratingFeynman] = useState(false);
 
   // Professor Feynman + Creator (YouTube)
   const [subjectId, setSubjectId] = useState<string>(subjects[0]?.id ?? '');
@@ -120,6 +132,57 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
   // Calibration
   const [profile, setProfile] = useState<LearningProfile | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
+
+  useEffect(() => {
+    api.getFeynmanLessons().then((list) => {
+      setFeynmanLessons(list);
+      if (list[0]) setActiveFeynman(list[0]);
+    }).catch(() => {});
+  }, []);
+
+  const handleFeynmanPdfSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFeynmanPdfName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = String(reader.result || '');
+      setFeynmanPdfBase64(res.includes(',') ? res.split(',')[1] : res);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleGenerateFeynman = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (generatingFeynman || (!feynmanPdfBase64 && !feynmanTranscript.trim() && !feynmanTopic.trim())) return;
+    setGeneratingFeynman(true);
+    try {
+      const created = await api.generateFeynmanLesson({
+        subject_id: subjectId || null,
+        pdf_base64: feynmanPdfBase64,
+        pdf_filename: feynmanPdfName,
+        transcript_text: feynmanTranscript,
+        topic_hint: feynmanTopic,
+        save_to_workspace: saveToWorkspace,
+      });
+      setFeynmanLessons((prev) => [created, ...prev]);
+      setActiveFeynman(created);
+      setFeynmanTranscript('');
+      setFeynmanTopic('');
+      setFeynmanPdfBase64(undefined);
+      setFeynmanPdfName('');
+      onNotify(
+        'Aula Feynman gerada!',
+        created.workspace_note_id
+          ? 'Salva no banco e também adicionada como nota no seu Workspace.'
+          : 'Aula estruturada salva com sucesso.'
+      );
+    } catch (err) {
+      onNotify('Erro ao gerar aula Feynman', (err as Error).message);
+    } finally {
+      setGeneratingFeynman(false);
+    }
+  };
 
   useEffect(() => {
     if (!subjectId && subjects[0]?.id) setSubjectId(subjects[0].id);
@@ -277,9 +340,10 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+        <div className="flex flex-wrap gap-1.5 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800">
           {[
-            { id: 'professor', label: 'Carlos Professor', icon: BrainCircuit },
+            { id: 'feynman', label: 'Aula Feynman (PDF + Áudio)', icon: Sparkles },
+            { id: 'professor', label: 'Carlos Creator (YouTube)', icon: BrainCircuit },
             { id: 'planner', label: 'Planejador & Agenda', icon: CalendarClock },
             { id: 'calibration', label: 'Calibração', icon: Sliders },
           ].map((tab) => {
@@ -302,6 +366,197 @@ export const ProfessorPlanner: React.FC<ProfessorPlannerProps> = ({ subjects, on
           })}
         </div>
       </div>
+
+      {/* SUBTAB 0: PIPELINE FEYNMAN MULTIMODAL (PDF SLIDES + TRANSCRIÇÃO) */}
+      {subTab === 'feynman' && (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+          <form
+            onSubmit={handleGenerateFeynman}
+            className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 lg:col-span-5"
+          >
+            <div>
+              <h3 className="text-base font-semibold text-white">Gerar Aula Feynman Multimodal</h3>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                Envie o PDF dos slides e/ou a transcrição da aula. A IA aplica a Técnica de Feynman com analogias, tradução técnica, armadilhas e perguntas de Active Recall.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-zinc-300">Matéria / Projeto</label>
+              <select
+                value={subjectId}
+                onChange={(e) => setSubjectId(e.target.value)}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-white"
+              >
+                <option value="">Geral (sem vínculo)</option>
+                {subjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.icon || '📚'} {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <input
+              value={feynmanTopic}
+              onChange={(e) => setFeynmanTopic(e.target.value)}
+              placeholder="Tema / Foco da aula (opcional se enviar PDF)"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-white placeholder:text-zinc-500"
+            />
+
+            <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-zinc-700 bg-zinc-950/70 px-3.5 py-2.5 text-xs text-zinc-300 hover:border-indigo-400">
+              <span className="flex items-center gap-2 truncate">
+                <Upload className="h-4 w-4 text-indigo-400" />
+                {feynmanPdfName ? `PDF pronto: ${feynmanPdfName}` : 'Subir PDF de slides (opcional)'}
+              </span>
+              <input type="file" accept="application/pdf" onChange={handleFeynmanPdfSelect} className="hidden" />
+            </label>
+
+            <textarea
+              rows={5}
+              value={feynmanTranscript}
+              onChange={(e) => setFeynmanTranscript(e.target.value)}
+              placeholder="Cole aqui a transcrição da aula ou suas anotações brutas..."
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-white placeholder:text-zinc-500"
+            />
+
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+              <input
+                type="checkbox"
+                checked={saveToWorkspace}
+                onChange={(e) => setSaveToWorkspace(e.target.checked)}
+                className="rounded border-zinc-700 bg-zinc-950"
+              />
+              Salvar também como nota no Workspace da matéria
+            </label>
+
+            <button
+              type="submit"
+              disabled={generatingFeynman || (!feynmanPdfBase64 && !feynmanTranscript.trim() && !feynmanTopic.trim())}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {generatingFeynman ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {generatingFeynman ? 'Processando slides + transcrição...' : 'Gerar Aula Feynman'}
+            </button>
+
+            {feynmanLessons.length > 0 && (
+              <div className="space-y-1.5 border-t border-zinc-800 pt-3">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Aulas Salvas ({feynmanLessons.length})
+                </span>
+                <div className="max-h-48 space-y-1.5 overflow-y-auto">
+                  {feynmanLessons.map((fl) => (
+                    <div
+                      key={fl.id}
+                      onClick={() => setActiveFeynman(fl)}
+                      className={`flex cursor-pointer items-center justify-between rounded-xl border px-3 py-2 text-xs transition ${
+                        activeFeynman?.id === fl.id
+                          ? 'border-indigo-500/60 bg-indigo-500/15 text-white'
+                          : 'border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:border-zinc-700'
+                      }`}
+                    >
+                      <span className="truncate font-medium">{fl.titulo_aula}</span>
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await api.deleteFeynmanLesson(fl.id);
+                          setFeynmanLessons((p) => p.filter((x) => x.id !== fl.id));
+                          if (activeFeynman?.id === fl.id) setActiveFeynman(null);
+                        }}
+                        className="ml-2 text-zinc-500 hover:text-rose-400"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </form>
+
+          <div className="lg:col-span-7">
+            {activeFeynman ? (
+              <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5">
+                <div className="border-b border-zinc-800 pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-400">
+                      {activeFeynman.subject_name || 'Aula Feynman'}
+                    </span>
+                    {activeFeynman.model_used && (
+                      <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
+                        {activeFeynman.model_used}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="mt-1 text-xl font-bold text-white">{activeFeynman.titulo_aula}</h3>
+                </div>
+
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-cyan-400">Conceito Central</h4>
+                  <p className="mt-1.5 text-sm leading-relaxed text-zinc-200">{activeFeynman.conceito_central}</p>
+                </div>
+
+                <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                    Analogia do Mundo Real
+                  </h4>
+                  <p className="mt-1.5 text-sm leading-relaxed text-zinc-100">{activeFeynman.analogia_mundo_real}</p>
+                </div>
+
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                    Tradução Técnica
+                  </h4>
+                  <p className="mt-1.5 text-sm leading-relaxed text-zinc-200">{activeFeynman.traducao_tecnica}</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4">
+                    <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-rose-300">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Armadilhas Comuns
+                    </h4>
+                    <ul className="mt-2 space-y-1.5 text-xs text-zinc-300">
+                      {activeFeynman.armadilhas_comuns.map((a, i) => (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" />
+                          <span>{a}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                    <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Active Recall (Teste Agora)
+                    </h4>
+                    <ul className="mt-2 space-y-1.5 text-xs text-zinc-200">
+                      {activeFeynman.perguntas_active_recall.map((p, i) => (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <span className="font-semibold text-amber-400">{i + 1}.</span>
+                          <span>{p}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full min-h-[340px] flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/20 p-8 text-center">
+                <Sparkles className="h-8 w-8 text-indigo-400/70" />
+                <p className="mt-3 text-sm font-medium text-zinc-200">
+                  Nenhuma aula Feynman selecionada
+                </p>
+                <p className="mt-1 max-w-sm text-xs text-zinc-400">
+                  Suba o PDF dos slides e/ou cole a transcrição da aula ao lado para gerar uma explicação completa com analogias e Active Recall.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* SUBTAB 1: MODO CARLOS PROFESSOR + CREATOR YOUTUBE */}
       {subTab === 'professor' && (

@@ -66,6 +66,7 @@ export function AiTutorChat({ subjects }: AiTutorChatProps) {
   const [thinkingSec, setThinkingSec] = useState(0);
   const [lastQuestion, setLastQuestion] = useState('');
   const [englishMode, setEnglishMode] = useState(false);
+  const [modelMode, setModelMode] = useState<'fast' | 'deep'>('fast');
   const [chatError, setChatError] = useState('');
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -153,6 +154,7 @@ export function AiTutorChat({ subjects }: AiTutorChatProps) {
         subject_id: selectedSubjectId || null,
         message: question,
         english_practice_mode: englishMode,
+        model_mode: modelMode,
       });
       setThreadId(res.threadId);
       setMessages((prev) => [...prev, res.message]);
@@ -168,9 +170,30 @@ export function AiTutorChat({ subjects }: AiTutorChatProps) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400">
-            RAG Híbrido · Citação Obrigatória · Critic Pass
+            RAG Híbrido · Notas + Livros + Feynman · Critic Pass
           </p>
           <h1 className="heading-fluid font-bold text-zinc-50">Tutor IA Anti-Alucinação</h1>
+        </div>
+
+        <div className="inline-flex rounded-xl border border-zinc-800 bg-zinc-900/70 p-1">
+          <button
+            type="button"
+            onClick={() => setModelMode('fast')}
+            className={`rounded-lg px-3 py-1 text-xs font-medium transition ${
+              modelMode === 'fast' ? 'bg-cyan-500/20 text-cyan-300' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            ⚡ Rápido (3.5 Flash)
+          </button>
+          <button
+            type="button"
+            onClick={() => setModelMode('deep')}
+            className={`rounded-lg px-3 py-1 text-xs font-medium transition ${
+              modelMode === 'deep' ? 'bg-indigo-500/25 text-indigo-200' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            🧠 Profundo (2.5 Pro)
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

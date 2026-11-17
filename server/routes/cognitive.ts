@@ -8,6 +8,7 @@ import {
   generateProfessorLesson,
   suggestObsidianLinks,
 } from '../services/cognitiveAi.js';
+import { runFeynmanWorkflow } from '../services/feynmanPipeline.js';
 
 export const cognitiveRouter = Router();
 
@@ -301,4 +302,72 @@ cognitiveRouter.post('/checkins', async (req, res) => {
   }
 
   res.status(201).json({ ok: true, id });
+});
+
+// --- Multimodal Feynman Pipeline (PDF Slides + Transcript -> Structured Lesson) ---
+cognitiveRouter.get('/feynman-lessons', async (req, res) => {
+  const subjectId = typeof req.query.subjectId === 'string' ? req.query.subjectId : null;
+  const rows = subjectId
+    ? await queryAll<Record<string, unknown>>(
+        `SELECT fl.*, s.name as subject_name FROM feynman_lessons fl LEFT JOIN subjects s ON s.id = fl.subject_id WHERE fl.user_id = ? AND fl.subject_id = ? ORDER BY fl.created_at DESC LIMIT 30`,
+        [req.userId, subjectId]
+      )
+    : await queryAll<Record<string, unknown>>(
+        `SELECT fl.*, s.name as subject_name FROM feynman_lessons fl LEFT JOIN subjects s ON s.id = fl.subject_id WHERE fl.user_id = ? ORDER BY fl.created_at DESC LIMIT 30`,
+        [req.userId]
+      );
+
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      armadilhas_comuns: JSON.parse(String(r.armadilhas_comuns_json || '[]')),
+      perguntas_active_recall: JSON.parse(String(r.perguntas_active_recall_json || '[]')),
+    }))
+  );
+});
+
+cognitiveRouter.post('/feynman-lessons/generate', async (req, res) => {
+  const {
+    subject_id = null,
+    pdf_base64,
+    pdf_filename = '',
+    transcript_text = '',
+    topic_hint = '',
+    model,
+    save_to_workspace = true,
+  } = req.body as {
+    subject_id?: string | null;
+    pdf_base64?: string;
+    pdf_filename?: string;
+    transcript_text?: string;
+    topic_hint?: string;
+    model?: string;
+    save_to_workspace?: boolean;
+  };
+
+  if (!pdf_base64 && !transcript_text?.trim() && !topic_hint?.trim()) {
+    res.status(400).json({ error: 'Envie um PDF de slides, uma transcrição ou o tema da aula.' });
+    return;
+  }
+
+  const saved = await runFeynmanWorkflow({
+    userId: req.userId,
+    subjectId: subject_id,
+    pdfBase64: pdf_base64,
+    pdfFilename: pdf_filename,
+    transcriptText: transcript_text,
+    topicHint: topic_hint,
+    model,
+    saveToWorkspace: Boolean(save_to_workspace),
+  });
+
+  res.status(201).json(saved);
+});
+
+cognitiveRouter.delete('/feynman-lessons/:id', async (req, res) => {
+  await execute(`DELETE FROM feynman_lessons WHERE id = ? AND user_id = ?`, [
+    req.params.id,
+    req.userId,
+  ]);
+  res.json({ ok: true });
 });

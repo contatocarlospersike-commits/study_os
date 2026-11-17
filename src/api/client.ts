@@ -8,6 +8,7 @@ import type {
   ChecklistItem,
   Concept,
   DailyPlanResponse,
+  FeynmanLesson,
   Flashcard,
   GraphData,
   LearningProfile,
@@ -259,6 +260,7 @@ export const api = {
     subject_id?: string | null;
     message: string;
     english_practice_mode?: boolean;
+    model_mode?: 'fast' | 'deep';
   }) => request<{ threadId: string; message: ChatMessage }>('/api/chat', { method: 'POST', body: JSON.stringify(body) }),
 
   // Library & Inbox ("Jogar o Grosso")
@@ -368,4 +370,26 @@ export const api = {
     ),
   toggleStudyBlockComplete: (blockId: string) =>
     request<StudyBlock>(`/api/study-plans/blocks/${blockId}/complete`, { method: 'POST' }),
+
+  getFeynmanLessons: (subjectId?: string) =>
+    request<FeynmanLesson[]>(
+      subjectId
+        ? `/api/cognitive/feynman-lessons?subjectId=${encodeURIComponent(subjectId)}`
+        : '/api/cognitive/feynman-lessons'
+    ),
+  generateFeynmanLesson: (body: {
+    subject_id?: string | null;
+    pdf_base64?: string;
+    pdf_filename?: string;
+    transcript_text?: string;
+    topic_hint?: string;
+    model?: string;
+    save_to_workspace?: boolean;
+  }) =>
+    request<FeynmanLesson>('/api/cognitive/feynman-lessons/generate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  deleteFeynmanLesson: (id: string) =>
+    request<{ ok: boolean }>(`/api/cognitive/feynman-lessons/${id}`, { method: 'DELETE' }),
 };

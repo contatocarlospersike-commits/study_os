@@ -163,7 +163,13 @@ chatRouter.get('/threads/:id/messages', async (req, res) => {
 });
 
 chatRouter.post('/', async (req, res) => {
-  const { thread_id, subject_id = null, message, english_practice_mode = false } = req.body;
+  const {
+    thread_id,
+    subject_id = null,
+    message,
+    english_practice_mode = false,
+    model_mode = 'fast',
+  } = req.body;
   if (!message || typeof message !== 'string') {
     res.status(400).json({ error: 'message é obrigatório.' });
     return;
@@ -203,6 +209,7 @@ chatRouter.post('/', async (req, res) => {
     question: message,
     subjectId: subject_id,
     englishPracticeMode: Boolean(english_practice_mode),
+    modelMode: model_mode === 'deep' ? 'deep' : 'fast',
     history: [...historyRows].reverse(),
   });
 
