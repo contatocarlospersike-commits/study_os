@@ -91,6 +91,7 @@ export async function initDatabase(): Promise<void> {
   try {
     await queryOne(`SELECT 1 FROM animated_lessons LIMIT 1`);
     await queryOne(`SELECT 1 FROM feynman_lessons LIMIT 1`);
+    await queryOne(`SELECT 1 FROM media_upload_chunks LIMIT 1`);
     await queryOne(`SELECT cover_style FROM books LIMIT 1`);
     await queryOne(`SELECT kind FROM subjects LIMIT 1`);
     return;
