@@ -31,7 +31,26 @@ interface UploadedAttachment {
   progress: number;
   status: 'uploading' | 'processing' | 'ready' | 'error';
   uri?: string;
+  extractedText?: string;
+  createdAt?: number;
   error?: string;
+}
+
+const ATTACHMENTS_STORAGE_KEY = 'studyos_lesson_attachments_v1';
+const ATTACHMENTS_TTL_MS = 24 * 60 * 60 * 1000;
+
+function loadSavedAttachments(): UploadedAttachment[] {
+  try {
+    const raw = localStorage.getItem(ATTACHMENTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as UploadedAttachment[];
+    const now = Date.now();
+    return Array.isArray(parsed)
+      ? parsed.filter((a) => a.status === 'ready' && a.uri && (!a.createdAt || now - a.createdAt < ATTACHMENTS_TTL_MS))
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 function sanitizeSvg(raw?: string): string | null {
@@ -233,12 +252,22 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const [targetMinutes, setTargetMinutes] = useState<number>(30);
   const [technique, setTechnique] = useState('Feynman + Diagramas + Exemplos');
 
-  // Direct Multi-File Upload (PDFs, Audios, Videos) to Gemini Files API
-  const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
+  // Direct Multi-File Upload (PDFs, Audios, Videos) to Gemini Files API (persisted in localStorage)
+  const [attachments, setAttachments] = useState<UploadedAttachment[]>(() => loadSavedAttachments());
 
   const [generating, setGenerating] = useState(false);
   const [genSeconds, setGenSeconds] = useState(0);
+  const [genStageText, setGenStageText] = useState('');
   const [genError, setGenError] = useState('');
+
+  useEffect(() => {
+    try {
+      const ready = attachments.filter((a) => a.status === 'ready' && a.uri);
+      localStorage.setItem(ATTACHMENTS_STORAGE_KEY, JSON.stringify(ready));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [attachments]);
   const [expandingModuleIdx, setExpandingModuleIdx] = useState<number | null>(null);
   const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [speakingSlide, setSpeakingSlide] = useState(false);
@@ -365,7 +394,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
         }
       }
       if (!uri) throw new Error('URI de mídia indisponível.');
-      updateAttachment(id, { status: 'ready', progress: 100, uri });
+      updateAttachment(id, { status: 'ready', progress: 100, uri, createdAt: Date.now() });
     } catch (err) {
       const msg = (err as Error).message || 'Erro no upload';
       updateAttachment(id, { status: 'error', error: msg });
@@ -432,21 +461,41 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
       setGenError('Espere todos os arquivos terminarem de enviar/processar antes de gerar os slides.');
       return;
     }
-    const readyFiles = attachments
-      .filter((a) => a.status === 'ready' && a.uri)
-      .map((a) => ({ uri: a.uri!, mime_type: a.mimeType, name: a.name }));
+    const readyAttachments = attachments.filter((a) => a.status === 'ready' && a.uri);
 
-    if (!topicHint.trim() && !transcriptText.trim() && readyFiles.length === 0 && !subjectId) {
+    if (!topicHint.trim() && !transcriptText.trim() && readyAttachments.length === 0 && !subjectId) {
       setGenError('Escolha uma matéria, digite o tema ou suba pelo menos um arquivo.');
       return;
     }
     setGenerating(true);
     try {
+      // Etapa 1: extrai o dossiê de cada arquivo individualmente (evita 504 na Vercel e salva cache no localStorage)
+      const extractedSections: string[] = [];
+      for (let i = 0; i < readyAttachments.length; i++) {
+        const att = readyAttachments[i];
+        let summary = att.extractedText;
+        if (!summary) {
+          setGenStageText(`Lendo arquivo ${i + 1}/${readyAttachments.length}: ${att.name}`);
+          const res = await api.extractMediaSummary({
+            uri: att.uri!,
+            mime_type: att.mimeType,
+            name: att.name,
+          });
+          summary = res.summary;
+          updateAttachment(att.id, { extractedText: summary });
+        }
+        if (summary) {
+          extractedSections.push(`=== ARQUIVO ${i + 1}: ${att.name} ===\n${summary}`);
+        }
+      }
+
+      const combinedTranscript = [transcriptText.trim(), ...extractedSections].filter(Boolean).join('\n\n');
+      setGenStageText('Gerando slides Feynman & diagramas...');
+
       const created = await api.generateAnimatedLesson({
         subject_id: subjectId || null,
         topic_hint: topicHint.trim(),
-        transcript_text: transcriptText.trim(),
-        media_files: readyFiles.length > 0 ? readyFiles : undefined,
+        transcript_text: combinedTranscript,
         target_minutes: targetMinutes,
         technique,
       });
@@ -455,7 +504,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
       setSlideIdx(0);
       onNotify('Slides gerados!', 'Os primeiros slides já estão prontos — demais módulos carregam em segundo plano.');
       if (created.modules.some((m) => !m.expanded)) {
-        void expandRemainingModules(created, readyFiles.length > 0 ? readyFiles : undefined);
+        void expandRemainingModules(created);
       }
     } catch (err) {
       const msg = (err as Error).message || 'Erro ao gerar slides';
@@ -463,6 +512,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
       onNotify('Erro ao gerar slides', msg);
     } finally {
       setGenerating(false);
+      setGenStageText('');
     }
   };
 
@@ -602,8 +652,16 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
           {attachments.length > 0 && (
             <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950/60 p-2">
               <div className="flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                <span>Arquivos na fila ({attachments.length})</span>
-                <span>{attachments.filter((a) => a.status === 'ready').length} prontos</span>
+                <span>
+                  Arquivos na fila ({attachments.length}) · {attachments.filter((a) => a.status === 'ready').length} prontos
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAttachments([])}
+                  className="text-[10px] font-semibold text-zinc-400 hover:text-rose-300"
+                >
+                  Limpar
+                </button>
               </div>
               {attachments.map((att) => {
                 const isPdf = att.mimeType.includes('pdf');
@@ -669,7 +727,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {generating ? `Gerando slides... (${genSeconds}s)` : 'Gerar Slides Completos'}
+            {generating ? `${genStageText || 'Gerando slides...'} (${genSeconds}s)` : 'Gerar Slides Completos'}
           </button>
 
           {genError && (

@@ -11,6 +11,7 @@ import {
 import { runFeynmanWorkflow } from '../services/feynmanPipeline.js';
 import {
   checkGeminiFileStatus,
+  extractMaterialKnowledge,
   forwardGeminiUploadChunk,
   generateAnimatedLessonInitial,
   generateAnimatedLessonModule,
@@ -482,6 +483,24 @@ cognitiveRouter.get('/media/status', async (req, res) => {
   res.json(status);
 });
 
+cognitiveRouter.post('/media/extract-summary', async (req, res) => {
+  const { uri, mime_type = 'application/octet-stream', name = 'arquivo' } = req.body as {
+    uri?: string;
+    mime_type?: string;
+    name?: string;
+  };
+  if (!uri) {
+    res.status(400).json({ error: 'uri é obrigatório.' });
+    return;
+  }
+  const summary = await extractMaterialKnowledge({
+    name,
+    mimeType: mime_type,
+    fileUri: uri,
+  });
+  res.json({ summary });
+});
+
 // --- Animated Interactive Video Lessons (30s Demo to 60min Deep Masterclass) ---
 cognitiveRouter.get('/animated-lessons', async (req, res) => {
   const rows = await queryAll<Record<string, unknown>>(
@@ -553,6 +572,10 @@ cognitiveRouter.post('/animated-lessons/generate', async (req, res) => {
     technique,
   });
 
+  const fullSummary = extraContext
+    ? `${generated.source_summary}\n\n---\n${extraContext.slice(0, 22000)}`
+    : generated.source_summary;
+
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await execute(
@@ -565,7 +588,7 @@ cognitiveRouter.post('/animated-lessons/generate', async (req, res) => {
       generated.title,
       Number(target_minutes) || 5,
       technique,
-      generated.source_summary,
+      fullSummary,
       JSON.stringify(generated.modules),
       JSON.stringify(generated.scenes),
       now,

@@ -18,7 +18,7 @@ async function generateContentWithFallback(
   config: unknown
 ) {
   const candidates = Array.from(
-    new Set([MODEL, 'gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-2.5-pro'])
+    new Set([MODEL, 'gemini-3.8-flash', 'gemini-3-flash-preview'])
   );
   let lastError: unknown;
   for (const model of candidates) {
@@ -336,6 +336,41 @@ const SCENE_SCHEMA = {
   ],
 };
 
+export async function extractMaterialKnowledge(params: {
+  name: string;
+  mimeType: string;
+  fileUri: string;
+}): Promise<string> {
+  const ai = getAi();
+  const res = await generateContentWithFallback(
+    ai,
+    [
+      {
+        role: 'user',
+        parts: [
+          {
+            fileData: {
+              mimeType: params.mimeType || 'application/octet-stream',
+              fileUri: params.fileUri,
+            },
+          },
+          {
+            text: `Analise integralmente o arquivo "${params.name}" e extraia um DOSSIÊ COMPLETO E FIEL do conteúdo técnico para servir de base a uma aula interativa profunda em PT-BR.
+Inclua:
+1. Todos os tópicos e subtópicos reais abordados.
+2. Definições formais, regras, teoremas e fórmulas exatas.
+3. Todos os exemplos numéricos/práticos resolvidos presentes no material.
+4. Eventuais erros, deslizes ou pegadinhas mencionados ou presentes no material.
+Seja completo, preciso e fiel ao conteúdo real (NUNCA fale sobre autodidatismo).`,
+          },
+        ],
+      },
+    ],
+    {}
+  );
+  return (res.text || '').trim();
+}
+
 export async function generateAnimatedLessonInitial(params: {
   subjectName: string;
   topicHint: string;
@@ -395,7 +430,7 @@ REGRA CRÍTICA DE FIDELIDADE:
 - NUNCA fale sobre "estudo livre", "autodidatismo" ou "técnicas de estudo", a menos que o material enviado seja explicitamente sobre isso.
 
 CONTEÚDO / ANOTAÇÕES ENVIADAS PELO ALUNO:
-${attachedFilesHint}${params.transcriptText?.slice(0, 14000) || 'Analise integralmente todos os PDFs, áudios ou vídeos anexados.'}
+${attachedFilesHint}${params.transcriptText?.slice(0, 45000) || 'Analise integralmente todos os PDFs, áudios ou vídeos anexados.'}
 
 Gere ${params.targetMinutes <= 1 ? '4' : '6'} slides profundos seguindo:
 ${feynmanSlideSpec}`
@@ -408,7 +443,7 @@ REGRA CRÍTICA DE FIDELIDADE:
 - NUNCA invente aulas sobre "estudo livre" ou "autodidatismo". Ensine EXCLUSIVAMENTE a matéria real do material enviado.
 
 CONTEÚDO / ANOTAÇÕES ENVIADAS PELO ALUNO:
-${attachedFilesHint}${params.transcriptText?.slice(0, 14000) || 'Analise integralmente todos os PDFs, áudios ou vídeos anexados.'}
+${attachedFilesHint}${params.transcriptText?.slice(0, 45000) || 'Analise integralmente todos os PDFs, áudios ou vídeos anexados.'}
 
 FAÇA DUAS COISAS AGORA (RESPOSTA RÁPIDA E OBJETIVA):
 1. Divida o conteúdo real em 4 a 6 MÓDULOS progressivos ("modules") cobrindo TODOS os arquivos enviados.
@@ -515,7 +550,7 @@ Agora gere 3 a 4 slides PROFUNDOS do Módulo ${params.moduleIndex + 1}: "${param
 Objetivo: ${params.moduleGoal}
 
 CONTEXTO / MATERIAIS:
-${params.contextText.slice(0, 10000)}
+${params.contextText.slice(0, 25000)}
 
 Para cada slide preencha rigorosamente:
 - "category", "scene_title", "simple_words" (analogia do dia a dia), "formal_definition" (aprofundamento técnico), "example" (passo a passo), "common_error" (pegadinha ou deslize nos slides originais), "feynman_test" (pergunta Active Recall), "feynman_answer_hint" (gabarito), "diagram_svg" (<svg viewBox="0 0 460 280" xmlns="http://www.w3.org/2000/svg">...</svg> ilustrativo específico deste conceito com fundo transparente e textos claros #f4f4f5), "narration", "key_takeaway" e "sources_hint".

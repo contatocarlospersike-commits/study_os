@@ -469,6 +469,11 @@ export const api = {
     request<{ state: string; uri: string; mimeType: string }>(
       `/api/cognitive/media/status?name=${encodeURIComponent(name)}`
     ),
+  extractMediaSummary: (body: { uri: string; mime_type: string; name?: string }) =>
+    request<{ summary: string }>('/api/cognitive/media/extract-summary', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   getAnimatedLessons: () => request<AnimatedLesson[]>('/api/cognitive/animated-lessons'),
   generateAnimatedLesson: (body: {
     subject_id?: string | null;
