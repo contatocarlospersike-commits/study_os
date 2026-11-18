@@ -22,31 +22,24 @@ async function generateContentWithFallback(
   );
   let lastError: unknown;
   for (const model of candidates) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await ai.models.generateContent({
-          model,
-          contents: contents as never,
-          config: config as never,
-        });
-      } catch (err) {
-        lastError = err;
-        const msg = String((err as Error)?.message || err);
-        const isNotFound = msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('no longer available');
-        const isBusy =
-          msg.includes('503') ||
-          msg.includes('UNAVAILABLE') ||
-          msg.includes('high demand') ||
-          msg.includes('429') ||
-          msg.includes('RESOURCE_EXHAUSTED');
-        if (isNotFound) break;
-        if (isBusy && attempt === 0) {
-          await new Promise((r) => setTimeout(r, 1500));
-          continue;
-        }
-        if (isBusy) break;
-        throw err;
-      }
+    try {
+      return await ai.models.generateContent({
+        model,
+        contents: contents as never,
+        config: config as never,
+      });
+    } catch (err) {
+      lastError = err;
+      const msg = String((err as Error)?.message || err);
+      const isNotFound = msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('no longer available');
+      const isBusy =
+        msg.includes('503') ||
+        msg.includes('UNAVAILABLE') ||
+        msg.includes('high demand') ||
+        msg.includes('429') ||
+        msg.includes('RESOURCE_EXHAUSTED');
+      if (isNotFound || isBusy) continue;
+      throw err;
     }
   }
   throw lastError instanceof Error ? lastError : new Error('Todos os modelos Gemini estão indisponíveis no momento.');
@@ -417,9 +410,9 @@ REGRA CRÍTICA DE FIDELIDADE:
 CONTEÚDO / ANOTAÇÕES ENVIADAS PELO ALUNO:
 ${attachedFilesHint}${params.transcriptText?.slice(0, 14000) || 'Analise integralmente todos os PDFs, áudios ou vídeos anexados.'}
 
-FAÇA DUAS COISAS AGORA:
-1. Divida o conteúdo real em 4 a 6 MÓDULOS progressivos ("modules").
-2. Já gere os 5 primeiros SLIDES profundos ("scenes") do MÓDULO 1 seguindo:
+FAÇA DUAS COISAS AGORA (RESPOSTA RÁPIDA E OBJETIVA):
+1. Divida o conteúdo real em 4 a 6 MÓDULOS progressivos ("modules") cobrindo TODOS os arquivos enviados.
+2. Já gere os 2 primeiros SLIDES profundos ("scenes") do MÓDULO 1 (os demais módulos serão expandidos logo em seguida) seguindo:
 ${feynmanSlideSpec}`;
 
   const contentsPayload = [
@@ -518,7 +511,7 @@ export async function generateAnimatedLessonModule(params: {
 }): Promise<AnimatedScene[]> {
   const ai = getAi();
   const prompt = `Você continua a aula completa "${params.lessonTitle}" (Técnica: ${params.technique}).
-Agora gere 4 a 5 slides PROFUNDOS do Módulo ${params.moduleIndex + 1}: "${params.moduleTitle}" (${params.moduleMinutes} min).
+Agora gere 3 a 4 slides PROFUNDOS do Módulo ${params.moduleIndex + 1}: "${params.moduleTitle}" (${params.moduleMinutes} min).
 Objetivo: ${params.moduleGoal}
 
 CONTEXTO / MATERIAIS:
