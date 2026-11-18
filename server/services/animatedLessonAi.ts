@@ -12,34 +12,85 @@ function getAi(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: getApiKey() });
 }
 
+let cachedModels: { ts: number; names: string[] } | null = null;
+
+async function listAvailableGenerateModels(): Promise<string[]> {
+  if (cachedModels && Date.now() - cachedModels.ts < 10 * 60_000) {
+    return cachedModels.names;
+  }
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(getApiKey())}`
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      models?: Array<{ name?: string; supportedGenerationMethods?: string[] }>;
+    };
+    const names = (data.models || [])
+      .filter(
+        (m) =>
+          m.name &&
+          m.supportedGenerationMethods?.includes('generateContent') &&
+          !m.name.includes('tts') &&
+          !m.name.includes('embedding') &&
+          !m.name.includes('imagen') &&
+          !m.name.includes('veo')
+      )
+      .map((m) => m.name!.replace(/^models\//, ''));
+    const score = (n: string) => {
+      if (n === 'gemini-3.8-flash') return 0;
+      if (n.includes('3.8') && n.includes('flash')) return 1;
+      if (n.includes('3.8') && n.includes('pro')) return 2;
+      if (n.includes('flash') && !n.includes('2.5')) return 3;
+      if (n.includes('2.5-pro')) return 4;
+      if (n.includes('flash')) return 5;
+      if (n.includes('pro')) return 6;
+      return 10;
+    };
+    names.sort((a, b) => score(a) - score(b));
+    cachedModels = { ts: Date.now(), names };
+    return names;
+  } catch {
+    return [];
+  }
+}
+
 async function generateContentWithFallback(
   ai: GoogleGenAI,
   contents: unknown,
   config: unknown
 ) {
+  const dynamicModels = await listAvailableGenerateModels();
   const candidates = Array.from(
-    new Set([MODEL, 'gemini-3.8-flash', 'gemini-3-flash-preview'])
-  );
+    new Set([MODEL, 'gemini-3.8-flash', ...dynamicModels])
+  ).slice(0, 5);
   let lastError: unknown;
   for (const model of candidates) {
-    try {
-      return await ai.models.generateContent({
-        model,
-        contents: contents as never,
-        config: config as never,
-      });
-    } catch (err) {
-      lastError = err;
-      const msg = String((err as Error)?.message || err);
-      const isNotFound = msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('no longer available');
-      const isBusy =
-        msg.includes('503') ||
-        msg.includes('UNAVAILABLE') ||
-        msg.includes('high demand') ||
-        msg.includes('429') ||
-        msg.includes('RESOURCE_EXHAUSTED');
-      if (isNotFound || isBusy) continue;
-      throw err;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await ai.models.generateContent({
+          model,
+          contents: contents as never,
+          config: config as never,
+        });
+      } catch (err) {
+        lastError = err;
+        const msg = String((err as Error)?.message || err);
+        const isNotFound = msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('no longer available');
+        const isBusy =
+          msg.includes('503') ||
+          msg.includes('UNAVAILABLE') ||
+          msg.includes('high demand') ||
+          msg.includes('429') ||
+          msg.includes('RESOURCE_EXHAUSTED');
+        if (isNotFound) break;
+        if (isBusy && attempt === 0) {
+          await new Promise((r) => setTimeout(r, 1200));
+          continue;
+        }
+        if (isBusy) break;
+        throw err;
+      }
     }
   }
   throw lastError instanceof Error ? lastError : new Error('Todos os modelos Gemini estão indisponíveis no momento.');
