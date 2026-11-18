@@ -12,6 +12,46 @@ function getAi(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: getApiKey() });
 }
 
+async function generateContentWithFallback(
+  ai: GoogleGenAI,
+  contents: unknown,
+  config: unknown
+) {
+  const candidates = Array.from(
+    new Set([MODEL, 'gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-2.5-pro'])
+  );
+  let lastError: unknown;
+  for (const model of candidates) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await ai.models.generateContent({
+          model,
+          contents: contents as never,
+          config: config as never,
+        });
+      } catch (err) {
+        lastError = err;
+        const msg = String((err as Error)?.message || err);
+        const isNotFound = msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('no longer available');
+        const isBusy =
+          msg.includes('503') ||
+          msg.includes('UNAVAILABLE') ||
+          msg.includes('high demand') ||
+          msg.includes('429') ||
+          msg.includes('RESOURCE_EXHAUSTED');
+        if (isNotFound) break;
+        if (isBusy && attempt === 0) {
+          await new Promise((r) => setTimeout(r, 1500));
+          continue;
+        }
+        if (isBusy) break;
+        throw err;
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Todos os modelos Gemini estão indisponíveis no momento.');
+}
+
 export interface VisualNode {
   label: string;
   detail: string;
@@ -423,11 +463,7 @@ ${feynmanSlideSpec}`;
     },
   };
 
-  const res = await ai.models.generateContent({
-    model: MODEL,
-    contents: contentsPayload,
-    config: configPayload,
-  });
+  const res = await generateContentWithFallback(ai, contentsPayload, configPayload);
 
   const parsed = JSON.parse(res.text || '{}') as {
     title?: string;
@@ -492,9 +528,9 @@ Para cada slide preencha rigorosamente:
 - "category", "scene_title", "simple_words" (analogia do dia a dia), "formal_definition" (aprofundamento técnico), "example" (passo a passo), "common_error" (pegadinha ou deslize nos slides originais), "feynman_test" (pergunta Active Recall), "feynman_answer_hint" (gabarito), "diagram_svg" (<svg viewBox="0 0 460 280" xmlns="http://www.w3.org/2000/svg">...</svg> ilustrativo específico deste conceito com fundo transparente e textos claros #f4f4f5), "narration", "key_takeaway" e "sources_hint".
 - No ÚLTIMO slide deste módulo ("slide_layout": "recap"), preencha "quiz_questions" com 3 a 4 questões A-D (correct_index 0..3 + explanation comentada). Nos demais, deixe "quiz_questions": [].`;
 
-  const res = await ai.models.generateContent({
-    model: MODEL,
-    contents: [
+  const res = await generateContentWithFallback(
+    ai,
+    [
       {
         role: 'user',
         parts: buildMultimodalParts({
@@ -505,7 +541,7 @@ Para cada slide preencha rigorosamente:
         }),
       },
     ],
-    config: {
+    {
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.OBJECT,
@@ -517,8 +553,8 @@ Para cada slide preencha rigorosamente:
         },
         required: ['scenes'],
       },
-    },
-  });
+    }
+  );
 
   const parsed = JSON.parse(res.text || '{}') as {
     scenes?: Array<Omit<AnimatedScene, 'id' | 'module_index'>>;
