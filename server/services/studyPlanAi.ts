@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-const MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.5-flash';
+const MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.8-flash';
 
 function getAi(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY || '';

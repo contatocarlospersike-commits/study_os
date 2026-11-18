@@ -505,6 +505,12 @@ export interface AnimatedScene {
   feynman_answer_hint?: string;
   diagram_svg?: string;
   example_or_code?: string;
+  quiz_questions?: Array<{
+    question: string;
+    options: string[];
+    correct_index: number;
+    explanation: string;
+  }>;
   visual_nodes: AnimatedVisualNode[];
   connections: Array<{ from: string; to: string; label: string }>;
   key_takeaway: string;

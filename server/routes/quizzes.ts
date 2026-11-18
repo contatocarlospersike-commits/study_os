@@ -48,7 +48,7 @@ quizzesRouter.post('/generate', async (req, res) => {
 
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
-    model: process.env.GEMINI_CHAT_MODEL || 'gemini-3.5-flash',
+    model: process.env.GEMINI_CHAT_MODEL || 'gemini-3.8-flash',
     contents: `Crie um quiz de Active Recall em português (PT-BR) com exatamente 5 questões de múltipla escolha (4 opções cada) baseado no contexto abaixo. Se o contexto for curto, use conhecimento acadêmico sólido do tema.\n\n${contextText}`,
     config: {
       responseMimeType: 'application/json',

@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-const MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-2.5-flash';
+const MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.8-flash';
 
 function getApiKey(): string {
   const apiKey = process.env.GEMINI_API_KEY || '';
@@ -34,6 +34,12 @@ export interface AnimatedScene {
   feynman_answer_hint?: string;
   diagram_svg?: string;
   example_or_code?: string;
+  quiz_questions?: Array<{
+    question: string;
+    options: string[];
+    correct_index: number;
+    explanation: string;
+  }>;
   visual_nodes: VisualNode[];
   connections: Array<{ from: string; to: string; label: string }>;
   key_takeaway: string;
@@ -262,6 +268,19 @@ const SCENE_SCHEMA = {
     },
     key_takeaway: { type: Type.STRING },
     sources_hint: { type: Type.STRING },
+    quiz_questions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          question: { type: Type.STRING },
+          options: { type: Type.ARRAY, items: { type: Type.STRING } },
+          correct_index: { type: Type.INTEGER },
+          explanation: { type: Type.STRING },
+        },
+        required: ['question', 'options', 'correct_index', 'explanation'],
+      },
+    },
   },
   required: [
     'category',
@@ -330,7 +349,8 @@ export async function generateAnimatedLessonInitial(params: {
 - "feynman_answer_hint": Gabarito claro e completo para o aluno conferir depois de tentar responder.
 - "diagram_svg": Um código SVG VÁLIDO e LIMPO (<svg viewBox="0 0 460 280" xmlns="http://www.w3.org/2000/svg">...</svg>) desenhando um diagrama ilustrativo específico para ESTE slide (ex: conjuntos de Venn com elementos dentro, fluxos, gráficos, matrizes, caixas conectadas). Use fundo transparente, traços nítidos (#38bdf8, #818cf8, #34d399, #f59e0b, #fb7185) e textos legíveis em #f4f4f5 / #cbd5e1 (font-family="sans-serif").
 - "narration": Síntese falada conectando a analogia, a definição e o exemplo.
-- "key_takeaway": Frase-âncora de resumo do slide.`;
+- "key_takeaway": Frase-âncora de resumo do slide.
+- "quiz_questions": No ÚLTIMO slide deste módulo (com "slide_layout": "recap"), inclua 3 a 4 questões de múltipla escolha (4 opções A-D, "correct_index" 0..3 e "explanation" comentada) para fixação imediata! Nos slides de conteúdo normal, deixe "quiz_questions" vazio [].`;
 
   const prompt = isShort
     ? `Você é um Professor Especialista criando uma aula interativa profunda em português (PT-BR).
@@ -469,7 +489,8 @@ CONTEXTO / MATERIAIS:
 ${params.contextText.slice(0, 10000)}
 
 Para cada slide preencha rigorosamente:
-- "category", "scene_title", "simple_words" (analogia do dia a dia), "formal_definition" (aprofundamento técnico), "example" (passo a passo), "common_error" (pegadinha), "feynman_test" (pergunta Active Recall), "feynman_answer_hint" (gabarito), "diagram_svg" (<svg viewBox="0 0 460 280" xmlns="http://www.w3.org/2000/svg">...</svg> ilustrativo específico deste conceito com fundo transparente e textos claros #f4f4f5), "narration", "key_takeaway" e "sources_hint".`;
+- "category", "scene_title", "simple_words" (analogia do dia a dia), "formal_definition" (aprofundamento técnico), "example" (passo a passo), "common_error" (pegadinha ou deslize nos slides originais), "feynman_test" (pergunta Active Recall), "feynman_answer_hint" (gabarito), "diagram_svg" (<svg viewBox="0 0 460 280" xmlns="http://www.w3.org/2000/svg">...</svg> ilustrativo específico deste conceito com fundo transparente e textos claros #f4f4f5), "narration", "key_takeaway" e "sources_hint".
+- No ÚLTIMO slide deste módulo ("slide_layout": "recap"), preencha "quiz_questions" com 3 a 4 questões A-D (correct_index 0..3 + explanation comentada). Nos demais, deixe "quiz_questions": [].`;
 
   const res = await ai.models.generateContent({
     model: MODEL,

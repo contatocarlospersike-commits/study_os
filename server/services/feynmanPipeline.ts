@@ -23,7 +23,7 @@ export interface FeynmanPipelineInput {
 }
 
 const DEFAULT_FEYNMAN_MODEL =
-  process.env.GEMINI_FEYNMAN_MODEL || process.env.GEMINI_CHAT_MODEL || 'gemini-3.5-flash';
+  process.env.GEMINI_FEYNMAN_MODEL || process.env.GEMINI_CHAT_MODEL || 'gemini-3.8-flash';
 
 function getAiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY || '';

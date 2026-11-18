@@ -244,6 +244,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
   const [speakingSlide, setSpeakingSlide] = useState(false);
   const [feynmanInputs, setFeynmanInputs] = useState<Record<string, string>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<Record<string, boolean>>({});
+  const [quizSelections, setQuizSelections] = useState<Record<string, number>>({});
 
   const deckContainerRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -919,6 +920,78 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
                         </div>
                       )}
                     </div>
+
+                    {currentSlide.quiz_questions && currentSlide.quiz_questions.length > 0 && (
+                      <div className="space-y-3 rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                            Quiz Interativo · Fixação do Módulo
+                          </span>
+                          <span className="rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-200">
+                            Acertos:{' '}
+                            {
+                              currentSlide.quiz_questions.filter(
+                                (q, qi) => quizSelections[`${currentSlide.id}:${qi}`] === q.correct_index
+                              ).length
+                            }{' '}
+                            / {currentSlide.quiz_questions.length}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          {currentSlide.quiz_questions.map((q, qi) => {
+                            const key = `${currentSlide.id}:${qi}`;
+                            const picked = quizSelections[key];
+                            const answered = picked !== undefined;
+                            return (
+                              <div
+                                key={key}
+                                className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/80 p-3"
+                              >
+                                <p className="text-xs font-semibold text-zinc-100">
+                                  {qi + 1}. {q.question}
+                                </p>
+                                <div className="space-y-1.5">
+                                  {q.options.map((opt, oi) => {
+                                    const isCorrect = oi === q.correct_index;
+                                    const isPicked = picked === oi;
+                                    let cls =
+                                      'border-zinc-800 bg-zinc-900/70 text-zinc-300 hover:border-indigo-500/50';
+                                    if (answered) {
+                                      if (isCorrect) {
+                                        cls = 'border-emerald-500/60 bg-emerald-500/15 text-emerald-200';
+                                      } else if (isPicked) {
+                                        cls = 'border-rose-500/60 bg-rose-500/15 text-rose-200';
+                                      } else {
+                                        cls = 'border-zinc-800/50 bg-zinc-900/30 text-zinc-500';
+                                      }
+                                    }
+                                    return (
+                                      <button
+                                        key={oi}
+                                        type="button"
+                                        onClick={() => setQuizSelections((p) => ({ ...p, [key]: oi }))}
+                                        className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[11px] transition ${cls}`}
+                                      >
+                                        <span className="font-bold">
+                                          {String.fromCharCode(65 + oi)})
+                                        </span>
+                                        <span>{opt}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                {answered && q.explanation && (
+                                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2 text-[11px] text-zinc-300">
+                                    <strong className="text-indigo-300">Gabarito comentado:</strong>{' '}
+                                    {q.explanation}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>
