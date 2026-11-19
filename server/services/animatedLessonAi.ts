@@ -9,7 +9,7 @@ function getApiKey(): string {
 }
 
 function getAi(): GoogleGenAI {
-  return new GoogleGenAI({ apiKey: getApiKey() });
+  return new GoogleGenAI({ apiKey: getApiKey(), apiVersion: 'v1beta' });
 }
 
 let cachedModels: { ts: number; names: string[] } | null = null;
@@ -66,7 +66,7 @@ async function generateContentWithFallback(
   ).slice(0, 3);
 
   const deadline = Date.now() + 50_000; // Fica abaixo do limite de 60s da Vercel
-  let lastError: unknown;
+  const errors: string[] = [];
 
   for (const model of candidates) {
     const remaining = deadline - Date.now();
@@ -82,8 +82,8 @@ async function generateContentWithFallback(
         } as never,
       });
     } catch (err) {
-      lastError = err;
       const msg = String((err as Error)?.message || err);
+      errors.push(`${model}: ${msg.slice(0, 140)}`);
       const isTimeout =
         (err as Error)?.name === 'TimeoutError' ||
         (err as Error)?.name === 'AbortError' ||
@@ -100,8 +100,7 @@ async function generateContentWithFallback(
       throw err;
     }
   }
-  const detail = lastError instanceof Error ? lastError.message : String(lastError || 'Tempo esgotado');
-  throw new Error(`Gemini indisponível/lento (${candidates.join(', ')}): ${detail}`);
+  throw new Error(`Gemini indisponível/lento (${errors.join(' | ')})`);
 }
 
 export interface VisualNode {
