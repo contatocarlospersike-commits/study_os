@@ -468,6 +468,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
       return;
     }
     setGenerating(true);
+    let currentStage = 'Preparando materiais';
     try {
       // Etapa 1: extrai o dossiê de cada arquivo individualmente (evita 504 na Vercel e salva cache no localStorage)
       const extractedSections: string[] = [];
@@ -475,7 +476,8 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
         const att = readyAttachments[i];
         let summary = att.extractedText;
         if (!summary) {
-          setGenStageText(`Lendo arquivo ${i + 1}/${readyAttachments.length}: ${att.name}`);
+          currentStage = `Lendo arquivo ${i + 1}/${readyAttachments.length}: ${att.name}`;
+          setGenStageText(currentStage);
           const res = await api.extractMediaSummary({
             uri: att.uri!,
             mime_type: att.mimeType,
@@ -490,7 +492,8 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
       }
 
       const combinedTranscript = [transcriptText.trim(), ...extractedSections].filter(Boolean).join('\n\n');
-      setGenStageText('Gerando slides Feynman & diagramas...');
+      currentStage = 'Gerando slides Feynman & diagramas';
+      setGenStageText(`${currentStage}...`);
 
       const created = await api.generateAnimatedLesson({
         subject_id: subjectId || null,
@@ -507,7 +510,7 @@ export const AnimatedLessonStudio: React.FC<AnimatedLessonStudioProps> = ({
         void expandRemainingModules(created);
       }
     } catch (err) {
-      const msg = (err as Error).message || 'Erro ao gerar slides';
+      const msg = `[${currentStage}] ${(err as Error).message || 'Erro ao gerar slides'}`;
       setGenError(msg);
       onNotify('Erro ao gerar slides', msg);
     } finally {

@@ -58,42 +58,50 @@ async function listAvailableGenerateModels(): Promise<string[]> {
 async function generateContentWithFallback(
   ai: GoogleGenAI,
   contents: unknown,
-  config: unknown
+  config: Record<string, unknown>
 ) {
   const dynamicModels = await listAvailableGenerateModels();
   const candidates = Array.from(
     new Set([MODEL, 'gemini-3.8-flash', ...dynamicModels])
-  ).slice(0, 5);
+  ).slice(0, 3);
+
+  const deadline = Date.now() + 50_000; // Fica abaixo do limite de 60s da Vercel
   let lastError: unknown;
+
   for (const model of candidates) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await ai.models.generateContent({
-          model,
-          contents: contents as never,
-          config: config as never,
-        });
-      } catch (err) {
-        lastError = err;
-        const msg = String((err as Error)?.message || err);
-        const isNotFound = msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('no longer available');
-        const isBusy =
-          msg.includes('503') ||
-          msg.includes('UNAVAILABLE') ||
-          msg.includes('high demand') ||
-          msg.includes('429') ||
-          msg.includes('RESOURCE_EXHAUSTED');
-        if (isNotFound) break;
-        if (isBusy && attempt === 0) {
-          await new Promise((r) => setTimeout(r, 1200));
-          continue;
-        }
-        if (isBusy) break;
-        throw err;
-      }
+    const remaining = deadline - Date.now();
+    if (remaining < 6_000) break;
+
+    try {
+      return await ai.models.generateContent({
+        model,
+        contents: contents as never,
+        config: {
+          ...config,
+          abortSignal: AbortSignal.timeout(Math.min(42_000, remaining)),
+        } as never,
+      });
+    } catch (err) {
+      lastError = err;
+      const msg = String((err as Error)?.message || err);
+      const isTimeout =
+        (err as Error)?.name === 'TimeoutError' ||
+        (err as Error)?.name === 'AbortError' ||
+        msg.includes('aborted') ||
+        msg.includes('timeout');
+      const isNotFound = msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('no longer available');
+      const isBusy =
+        msg.includes('503') ||
+        msg.includes('UNAVAILABLE') ||
+        msg.includes('high demand') ||
+        msg.includes('429') ||
+        msg.includes('RESOURCE_EXHAUSTED');
+      if (isNotFound || isBusy || isTimeout) continue;
+      throw err;
     }
   }
-  throw lastError instanceof Error ? lastError : new Error('Todos os modelos Gemini estão indisponíveis no momento.');
+  const detail = lastError instanceof Error ? lastError.message : String(lastError || 'Tempo esgotado');
+  throw new Error(`Gemini indisponível/lento (${candidates.join(', ')}): ${detail}`);
 }
 
 export interface VisualNode {
